@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/features/home/presentation/bloc/home_bloc.dart';
 import 'package:sms_manager/src/core/widgets/timeline_scrollbar.dart';
+import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -353,7 +354,7 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildAvatar(thread, displayName, colorScheme),
+            SmartAvatar(thread: thread, radius: 24),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -432,78 +433,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// Smart avatar: real photo > colored initial from contact name/number
-  Widget _buildAvatar(
-    SmsThread thread,
-    String displayName,
-    ColorScheme colorScheme,
-  ) {
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
-    // Generate a consistent color from the display name (for non-contact senders)
-    final avatarColor = _colorFromString(displayName, colorScheme);
-
-    if (thread.contactPhotoUri != null && thread.contactPhotoUri!.isNotEmpty) {
-      return CircleAvatar(
-        radius: 24,
-        backgroundColor: avatarColor,
-        child: ClipOval(
-          child: Image.network(
-            thread.contactPhotoUri!,
-            width: 48,
-            height: 48,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, _) => Text(
-              initial,
-              style: TextStyle(
-                color: colorScheme.onPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return CircleAvatar(
-      radius: 24,
-      backgroundColor: avatarColor,
-      child: Text(
-        initial,
-        style: TextStyle(
-          color: _onColor(avatarColor),
-          fontWeight: FontWeight.bold,
-          fontSize: 18,
-        ),
-      ),
-    );
-  }
-
-  /// Generates a consistent, visually pleasing color from any string (name/number)
-  Color _colorFromString(String input, ColorScheme colorScheme) {
-    // A curated set of Material-ish colors that work on both light/dark
-    const colors = [
-      Color(0xFF6750A4), // purple
-      Color(0xFF0288D1), // blue
-      Color(0xFF00897B), // teal
-      Color(0xFFC62828), // red
-      Color(0xFFE65100), // orange
-      Color(0xFF558B2F), // green
-      Color(0xFF6A1B9A), // deep purple
-      Color(0xFF00838F), // cyan
-      Color(0xFF4527A0), // indigo
-      Color(0xFFAD1457), // pink
-    ];
-    final hash = input.codeUnits.fold(0, (prev, c) => prev + c);
-    return colors[hash % colors.length];
-  }
-
-  Color _onColor(Color bg) {
-    // Simple luminance check
-    final luminance = bg.computeLuminance();
-    return luminance > 0.4 ? Colors.black : Colors.white;
-  }
 
   String _formatDate(int timestampMs) {
     final date = DateTime.fromMillisecondsSinceEpoch(timestampMs);

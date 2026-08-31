@@ -78,26 +78,59 @@ class MainActivity : FlutterActivity() {
                             result.error("INVALID_ARGUMENT", "address and body required", null)
                             return@setMethodCallHandler
                         }
-                        try {
-                            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                getSystemService(android.telephony.SmsManager::class.java)
-                            } else {
-                                @Suppress("DEPRECATION")
-                                android.telephony.SmsManager.getDefault()
-                            }
-                            smsManager.sendTextMessage(address, null, body, null, null)
+                        Thread {
+                            try {
+                                val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    getSystemService(android.telephony.SmsManager::class.java)
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    android.telephony.SmsManager.getDefault()
+                                }
 
-                            val values = android.content.ContentValues().apply {
-                                put(Telephony.Sms.ADDRESS, address)
-                                put(Telephony.Sms.BODY,    body)
-                                put(Telephony.Sms.DATE,    System.currentTimeMillis())
-                                put(Telephony.Sms.READ,    1)
-                                put(Telephony.Sms.TYPE,    Telephony.Sms.MESSAGE_TYPE_SENT)
+                                val parts = smsManager.divideMessage(body)
+                                if (parts.size == 1) {
+                                    smsManager.sendTextMessage(address, null, body, null, null)
+                                } else {
+                                    smsManager.sendMultipartTextMessage(address, null, parts, null, null)
+                                }
+
+                                val values = android.content.ContentValues().apply {
+                                    put(Telephony.Sms.ADDRESS, address)
+                                    put(Telephony.Sms.BODY,    body)
+                                    put(Telephony.Sms.DATE,    System.currentTimeMillis())
+                                    put(Telephony.Sms.READ,    1)
+                                    put(Telephony.Sms.TYPE,    Telephony.Sms.MESSAGE_TYPE_SENT)
+                                }
+                                contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+                                runOnUiThread { result.success(true) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("SEND_ERROR", e.message, null) }
                             }
-                            contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
-                            result.success(true)
+                        }.start()
+                    }
+
+                    "getSimInfo" -> {
+                        try {
+                            val simInfoList = mutableListOf<Map<String, Any?>>()
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                                val subManager = getSystemService(android.telephony.SubscriptionManager::class.java)
+                                val activeSubscriptions = try {
+                                    subManager?.activeSubscriptionInfoList
+                                } catch (e: SecurityException) {
+                                    null
+                                }
+                                activeSubscriptions?.forEach { info ->
+                                    simInfoList.add(mapOf(
+                                        "subscriptionId" to info.subscriptionId,
+                                        "simSlotIndex"   to info.simSlotIndex,
+                                        "displayName"    to (info.displayName?.toString() ?: "SIM ${info.simSlotIndex + 1}"),
+                                        "number"         to (info.number ?: "")
+                                    ))
+                                }
+                            }
+                            result.success(simInfoList)
                         } catch (e: Exception) {
-                            result.error("SEND_ERROR", e.message, null)
+                            result.success(emptyList<Map<String, Any?>>())
                         }
                     }
 
@@ -142,6 +175,25 @@ class MainActivity : FlutterActivity() {
                                 runOnUiThread { result.error("DELETE_ERROR", e.message, null) }
                             }
                         }.start()
+                    }
+
+                    "getContactPhoto" -> {
+                        val uriStr = call.argument<String>("uri")
+                        if (uriStr != null) {
+                            Thread {
+                                try {
+                                    val uri = android.net.Uri.parse(uriStr)
+                                    contentResolver.openInputStream(uri)?.use { stream ->
+                                        val bytes = stream.readBytes()
+                                        runOnUiThread { result.success(bytes) }
+                                    } ?: runOnUiThread { result.success(null) }
+                                } catch (e: Exception) {
+                                    runOnUiThread { result.success(null) }
+                                }
+                            }.start()
+                        } else {
+                            result.success(null)
+                        }
                     }
 
                     // Legacy single contact lookup (kept for compatibility)

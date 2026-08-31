@@ -36,6 +36,14 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            
+            <!-- Deep linking for notifications -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app" android:host="smsmanager" />
+            </intent-filter>
         </activity>
 
         <!-- ── Required to be the Default SMS App ── -->
@@ -64,6 +72,16 @@
         <!-- Handles inline reply from notification -->
         <receiver
             android:name=".SmsReplyReceiver"
+            android:exported="false" />
+            
+        <!-- Handles copying OTP from notification -->
+        <receiver
+            android:name=".OtpCopyReceiver"
+            android:exported="false" />
+            
+        <!-- Handles marking messages as read from notification -->
+        <receiver
+            android:name=".SmsMarkReadReceiver"
             android:exported="false" />
 
         <!-- Activity to compose a new SMS (required for default SMS role) -->
@@ -106,6 +124,22 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
         </intent>
     </queries>
 </manifest>

@@ -163,7 +163,8 @@ object SmsFetcher {
                 Telephony.Sms.BODY,
                 Telephony.Sms.DATE,
                 Telephony.Sms.READ,
-                Telephony.Sms.TYPE
+                Telephony.Sms.TYPE,
+                Telephony.Sms.SUBSCRIPTION_ID
             ),
             "${Telephony.Sms.THREAD_ID} = ?",
             arrayOf(threadId.toString()),
@@ -177,16 +178,18 @@ object SmsFetcher {
             val dateIdx     = c.getColumnIndexOrThrow(Telephony.Sms.DATE)
             val readIdx     = c.getColumnIndexOrThrow(Telephony.Sms.READ)
             val typeIdx     = c.getColumnIndexOrThrow(Telephony.Sms.TYPE)
+            val subIdIdx    = c.getColumnIndex(Telephony.Sms.SUBSCRIPTION_ID)
 
             while (c.moveToNext()) {
                 messages.add(mapOf(
-                    "id"       to c.getLong(idIdx),
-                    "threadId" to c.getLong(threadIdIdx),
-                    "address"  to (c.getString(addressIdx) ?: ""),
-                    "body"     to (c.getString(bodyIdx)    ?: ""),
-                    "date"     to c.getLong(dateIdx),
-                    "read"     to c.getInt(readIdx),
-                    "type"     to c.getInt(typeIdx)
+                    "id"             to c.getLong(idIdx),
+                    "threadId"       to c.getLong(threadIdIdx),
+                    "address"        to (c.getString(addressIdx) ?: ""),
+                    "body"           to (c.getString(bodyIdx)    ?: ""),
+                    "date"           to c.getLong(dateIdx),
+                    "read"           to c.getInt(readIdx),
+                    "type"           to c.getInt(typeIdx),
+                    "subscriptionId" to if (subIdIdx >= 0) c.getInt(subIdIdx) else -1
                 ))
             }
         } ?: Log.e(TAG, "fetchMessages: null cursor for threadId=$threadId")

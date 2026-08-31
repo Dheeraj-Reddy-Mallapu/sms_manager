@@ -12,6 +12,7 @@ import 'package:sms_manager/src/features/conversation/presentation/widgets/compo
 import 'package:sms_manager/src/features/conversation/presentation/widgets/message_context_menu.dart';
 import 'package:sms_manager/src/features/conversation/presentation/widgets/scroll_to_bottom_fab.dart';
 import 'package:sms_manager/src/features/home/presentation/bloc/home_bloc.dart';
+import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
 import 'package:sms_manager/src/core/widgets/timeline_scrollbar.dart';
 
 class ConversationPage extends StatefulWidget {
@@ -35,7 +36,6 @@ class ConversationPage extends StatefulWidget {
 class _ConversationPageState extends State<ConversationPage> {
   final _scrollController = ScrollController();
   bool _showScrollToBottom = false;
-  SmsMessage? _replyToMessage;
   bool _isSearching = false;
 
   // For read-tracking: set of message IDs currently visible
@@ -159,70 +159,70 @@ class _ConversationPageState extends State<ConversationPage> {
         return Scaffold(
           backgroundColor: colorScheme.surface,
           appBar: _buildAppBar(context, state, colorScheme, isMultiSelect),
-          body: Column(
-            children: [
-              Expanded(
-                child: Stack(
-                  children: [
-                    _buildMessageList(context, state, colorScheme),
-                    // Scroll-to-bottom FAB
-                    if (_showScrollToBottom && state is ConversationLoaded)
-                      Positioned(
-                        right: 0,
-                        bottom: 8,
-                        child: ScrollToBottomFab(
-                          unreadCount: state.unreadBelow,
-                          onTap: _scrollToBottom,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              // Compose bar (hidden in multi-select / search mode)
-              if (!isMultiSelect)
-                _canReply
-                    ? BlocBuilder<ConversationBloc, ConversationState>(
-                        builder: (context, state) {
-                          final isSending =
-                              state is ConversationLoaded && state.isSending;
-                          return ComposeBar(
-                            address: widget.address ?? '',
-                            isSending: isSending,
-                            replyToMessage: _replyToMessage,
-                            onDismissReply: () =>
-                                setState(() => _replyToMessage = null),
-                            onSend: (body) {
-                              context.read<ConversationBloc>().add(
-                                    SendMessage(
-                                      threadId: widget.threadId,
-                                      address: widget.address ?? '',
-                                      body: body,
-                                      replyTo: _replyToMessage,
-                                    ),
-                                  );
-                              setState(() => _replyToMessage = null);
-                            },
-                          );
-                        },
-                      )
-                    : Container(
-                        padding: const EdgeInsets.all(16),
-                        alignment: Alignment.center,
-                        color: colorScheme.surfaceContainerHighest,
-                        child: Text(
-                          'Sender does not support replies',
-                          style: TextStyle(
-                            color: colorScheme.onSurfaceVariant,
-                            fontSize: 13,
+          body: GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            behavior: HitTestBehavior.translucent,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      _buildMessageList(context, state, colorScheme),
+                      // Scroll-to-bottom FAB
+                      if (_showScrollToBottom && state is ConversationLoaded)
+                        Positioned(
+                          right: 0,
+                          bottom: 8,
+                          child: ScrollToBottomFab(
+                            unreadCount: state.unreadBelow,
+                            onTap: _scrollToBottom,
                           ),
                         ),
-                      ),
-            ],
+                    ],
+                  ),
+                ),
+                // Compose bar (hidden in multi-select mode)
+                if (!isMultiSelect)
+                  _canReply
+                      ? BlocBuilder<ConversationBloc, ConversationState>(
+                          builder: (context, state) {
+                            final isSending =
+                                state is ConversationLoaded && state.isSending;
+                            return ComposeBar(
+                              address: widget.address ?? '',
+                              isSending: isSending,
+                              onSend: (body) {
+                                context.read<ConversationBloc>().add(
+                                      SendMessage(
+                                        threadId: widget.threadId,
+                                        address: widget.address ?? '',
+                                        body: body,
+                                      ),
+                                    );
+                              },
+                            );
+                          },
+                        )
+                      : Container(
+                          padding: const EdgeInsets.all(16),
+                          alignment: Alignment.center,
+                          color: colorScheme.surfaceContainerHighest,
+                          child: Text(
+                            'Sender does not support replies',
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+              ],
+            ),
           ),
         );
       },
     );
   }
+
 
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
@@ -248,10 +248,15 @@ class _ConversationPageState extends State<ConversationPage> {
         onPressed: () => context.pop(),
       ),
       title: GestureDetector(
-        onTap: _openContactDetails,
+        onTap: () {}, // profile tap - reserved
         child: Row(
           children: [
-            _buildAvatar(colorScheme, size: 18),
+            SmartAvatar(
+              overrideAddress: widget.address,
+              overrideContactName: widget.contactName,
+              overrideContactPhotoUri: widget.contactPhotoUri,
+              radius: 18,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -283,30 +288,22 @@ class _ConversationPageState extends State<ConversationPage> {
         ),
       ),
       actions: [
-        if (_canReply)
-          IconButton(
-            icon: const Icon(Icons.call_outlined),
-            tooltip: 'Call',
-            onPressed: _call,
-          ),
+        // Search always visible in the app bar
+        IconButton(
+          icon: const Icon(Icons.search),
+          tooltip: 'Search',
+          onPressed: () => setState(() => _isSearching = true),
+        ),
         PopupMenuButton<String>(
           onSelected: _onMenuAction,
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'search', child: Text('Search')),
-            const PopupMenuItem(
-              value: 'view_contact',
-              child: Text('View contact'),
-            ),
-            const PopupMenuItem(value: 'block', child: Text('Block number')),
-            const PopupMenuItem(
-              value: 'delete',
-              child: Text('Delete conversation'),
-            ),
+            const PopupMenuItem(value: 'delete', child: Text('Delete conversation')),
           ],
         ),
       ],
     );
   }
+
 
   AppBar _buildSearchAppBar(BuildContext context, ColorScheme colorScheme) {
     return AppBar(
@@ -522,8 +519,7 @@ class _ConversationPageState extends State<ConversationPage> {
               position: pos,
               isSelected: state.selectedIds.contains(message.id),
               searchQuery: state.searchQuery,
-              onLongPress: (msg) => _showContextMenu(context, msg),
-              onReply: (msg) => setState(() => _replyToMessage = msg),
+              onShowMenu: (msg) => _showContextMenu(context, msg),
               onTap: state.selectedIds.isNotEmpty
                   ? (msg) => context.read<ConversationBloc>().add(
                       SelectMessage(msg.id),
@@ -537,10 +533,9 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   void _showContextMenu(BuildContext context, SmsMessage message) {
-    MessageContextMenu.show(
+    MessageSheet.show(
       context,
       message: message,
-      onReply: () => setState(() => _replyToMessage = message),
       onCopy: () {},
       onForward: () {
         context.go('/home/compose', extra: message.body);
@@ -550,7 +545,6 @@ class _ConversationPageState extends State<ConversationPage> {
       onDelete: () => _confirmDelete(context, message),
       onSelect: () =>
           context.read<ConversationBloc>().add(SelectMessage(message.id)),
-      onDetails: () => MessageDetailsSheet.show(context, message),
     );
   }
 
@@ -603,66 +597,10 @@ class _ConversationPageState extends State<ConversationPage> {
     );
   }
 
-  Widget _buildAvatar(ColorScheme colorScheme, {double size = 20}) {
-    final displayName = _displayName;
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
-    const colors = [
-      Color(0xFF6750A4),
-      Color(0xFF0288D1),
-      Color(0xFF00897B),
-      Color(0xFFC62828),
-      Color(0xFF558B2F),
-      Color(0xFF6A1B9A),
-    ];
-    final avatarColor =
-        colors[displayName.codeUnits.fold(0, (p, c) => p + c) % colors.length];
-
-    if (widget.contactPhotoUri?.isNotEmpty == true) {
-      return CircleAvatar(
-        radius: size,
-        backgroundColor: avatarColor,
-        backgroundImage: NetworkImage(widget.contactPhotoUri!),
-        onBackgroundImageError: (exception, stackTrace) {},
-        child: null,
-      );
-    }
-    return CircleAvatar(
-      radius: size,
-      backgroundColor: avatarColor,
-      child: Text(
-        initial,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  void _call() {
-    final address = widget.address;
-    if (address == null || address.isEmpty) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Calling $address…')));
-  }
-
-  void _openContactDetails() {
-    // TODO: open Android contact card via url_launcher tel: or ContactsContract
-  }
-
   void _onMenuAction(String action) {
     switch (action) {
-      case 'search':
-        setState(() => _isSearching = true);
-        break;
-      case 'view_contact':
-        _openContactDetails();
-        break;
-      case 'block':
-        // TODO: block via DB helper
-        break;
       case 'delete':
-        // TODO: delete entire thread
+        // TODO: delete entire thread with confirmation
         break;
     }
   }

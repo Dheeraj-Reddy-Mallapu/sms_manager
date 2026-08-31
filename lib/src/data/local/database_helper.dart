@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -55,7 +55,8 @@ CREATE TABLE messages (
   date      INTEGER NOT NULL,
   read      INTEGER NOT NULL,
   type      INTEGER NOT NULL,
-  isStarred INTEGER NOT NULL DEFAULT 0
+  isStarred INTEGER NOT NULL DEFAULT 0,
+  subscriptionId INTEGER NOT NULL DEFAULT -1
 )
 ''');
   }
@@ -81,6 +82,13 @@ CREATE TABLE messages (
       try {
         await db.execute(
           'ALTER TABLE threads ADD COLUMN isBlocked INTEGER NOT NULL DEFAULT 0',
+        );
+      } catch (_) {}
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute(
+          'ALTER TABLE messages ADD COLUMN subscriptionId INTEGER NOT NULL DEFAULT -1',
         );
       } catch (_) {}
     }

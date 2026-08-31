@@ -9,6 +9,7 @@ class SmsMessage extends Equatable {
   final bool read;
   final int type; // 1=Inbox, 2=Sent, 3=Draft, 4=Outbox, 5=Failed, 6=Queued
   final bool isStarred;
+  final int subscriptionId; // -1 = unknown, 0 = SIM 1, 1 = SIM 2 etc.
 
   /// True for optimistically-inserted outgoing messages that haven't been
   /// confirmed by the native SMS stack yet.
@@ -23,6 +24,7 @@ class SmsMessage extends Equatable {
     required this.read,
     required this.type,
     this.isStarred = false,
+    this.subscriptionId = -1,
     this.isOptimistic = false,
   });
 
@@ -41,6 +43,7 @@ class SmsMessage extends Equatable {
       read: ((map['read'] as num?)?.toInt() ?? 0) == 1,
       type: (map['type'] as num?)?.toInt() ?? 1,
       isStarred: ((map['isStarred'] as num?)?.toInt() ?? 0) == 1,
+      subscriptionId: (map['subscriptionId'] as num?)?.toInt() ?? -1,
       isOptimistic: false, // never persisted
     );
   }
@@ -55,6 +58,7 @@ class SmsMessage extends Equatable {
       'read': read ? 1 : 0,
       'type': type,
       'isStarred': isStarred ? 1 : 0,
+      'subscriptionId': subscriptionId,
     };
   }
 
@@ -64,6 +68,7 @@ class SmsMessage extends Equatable {
     bool? isStarred,
     bool? isOptimistic,
     int? type,
+    int? subscriptionId,
   }) => SmsMessage(
     id: id ?? this.id,
     threadId: threadId,
@@ -73,6 +78,7 @@ class SmsMessage extends Equatable {
     read: read ?? this.read,
     type: type ?? this.type,
     isStarred: isStarred ?? this.isStarred,
+    subscriptionId: subscriptionId ?? this.subscriptionId,
     isOptimistic: isOptimistic ?? this.isOptimistic,
   );
 
@@ -86,6 +92,8 @@ class SmsMessage extends Equatable {
     read,
     type,
     isStarred,
+    subscriptionId,
     isOptimistic,
   ];
 }
+

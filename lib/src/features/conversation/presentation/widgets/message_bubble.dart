@@ -1,7 +1,9 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:sms_manager/src/data/models/sms_message.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Bubble position within a group — determines which corners get rounded.
 enum BubblePosition { solo, first, middle, last }
@@ -12,13 +14,10 @@ class MessageBubble extends StatelessWidget {
   final bool isSelected;
   final String searchQuery;
 
-  /// Called when user long-presses the bubble.
-  final void Function(SmsMessage)? onLongPress;
+  /// Called when user taps or long-presses to open context sheet.
+  final void Function(SmsMessage)? onShowMenu;
 
-  /// Called when user swipes right (reply gesture).
-  final void Function(SmsMessage)? onReply;
-
-  /// Called when tapping for multi-select.
+  /// Called when tapping in multi-select mode.
   final void Function(SmsMessage)? onTap;
 
   const MessageBubble({
@@ -27,8 +26,7 @@ class MessageBubble extends StatelessWidget {
     this.position = BubblePosition.solo,
     this.isSelected = false,
     this.searchQuery = '',
-    this.onLongPress,
-    this.onReply,
+    this.onShowMenu,
     this.onTap,
   });
 
@@ -48,7 +46,7 @@ class MessageBubble extends StatelessWidget {
         ? colorScheme.onPrimary.withAlpha(179)
         : colorScheme.onSurfaceVariant;
 
-    // Corner radii — give a "tail" only to the outermost bubble of a group
+    // Corner radii
     const r = Radius.circular(18);
     const rSmall = Radius.circular(4);
     BorderRadius borderRadius;
@@ -89,23 +87,39 @@ class MessageBubble extends StatelessWidget {
     final bool showTime =
         position == BubblePosition.solo || position == BubblePosition.last;
 
-    // Vertical spacing
     final double topPadding =
         (position == BubblePosition.first || position == BubblePosition.solo)
         ? 6
         : 1.5;
 
-    Widget content = Padding(
-      padding: EdgeInsets.only(
-        top: topPadding,
-        bottom: 0,
-        left: isOut ? 48 : 8,
-        right: isOut ? 8 : 48,
-      ),
-      child: Row(
-          mainAxisAlignment: isOut
-              ? MainAxisAlignment.end
-              : MainAxisAlignment.start,
+    return GestureDetector(
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        if (onTap != null) {
+          // Multi-select mode: toggle select
+          onTap?.call(message);
+        } else {
+          onShowMenu?.call(message);
+        }
+      },
+      onTap: () {
+        if (onTap != null) {
+          onTap?.call(message);
+        } else {
+          onShowMenu?.call(message);
+        }
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: topPadding,
+          bottom: 0,
+          left: isOut ? 48 : 8,
+          right: isOut ? 8 : 48,
+        ),
+        child: Row(
+          mainAxisAlignment:
+              isOut ? MainAxisAlignment.end : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Flexible(
@@ -130,10 +144,7 @@ class MessageBubble extends StatelessWidget {
                       ? CrossAxisAlignment.end
                       : CrossAxisAlignment.start,
                   children: [
-                    // Message body with search highlight
                     _buildBody(context, textColor),
-
-                    // Status row: time + delivery icon + star
                     if (showTime)
                       Padding(
                         padding: const EdgeInsets.only(top: 3),
@@ -165,44 +176,19 @@ class MessageBubble extends StatelessWidget {
             ),
           ],
         ),
-      );
-
-    content = GestureDetector(
-      onLongPress: () {
-        HapticFeedback.mediumImpact();
-        onLongPress?.call(message);
-      },
-      onTap: () => onTap?.call(message),
-      behavior: HitTestBehavior.translucent,
-      child: content,
-    );
-
-    if (isOut) return content;
-
-    return Dismissible(
-      key: ValueKey('msg_${message.id}'),
-      direction: DismissDirection.startToEnd,
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        child: Icon(Icons.reply_rounded, color: colorScheme.onSurfaceVariant),
       ),
-      confirmDismiss: (direction) async {
-        HapticFeedback.lightImpact();
-        onReply?.call(message);
-        return false; // Don't actually dismiss the widget
-      },
-      child: content,
     );
   }
 
   Widget _buildBody(BuildContext context, Color textColor) {
     final body = message.body;
-    if (searchQuery.isEmpty) {
-      return _buildRichText(body, textColor, context);
+    if (searchQuery.isNotEmpty) {
+      return _buildSearchHighlight(body, textColor);
     }
+    return _buildRichText(body, textColor, context);
+  }
 
-    // Highlight search matches
+  Widget _buildSearchHighlight(String body, Color textColor) {
     final lower = body.toLowerCase();
     final queryLower = searchQuery.toLowerCase();
     final spans = <TextSpan>[];
@@ -233,18 +219,17 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  /// Detects URLs, phone numbers, emails and makes them tappable.
+  /// Detects URLs, phone numbers, emails and makes them directly tappable
+  /// using TapGestureRecognizer — no SelectableText needed.
   Widget _buildRichText(String body, Color textColor, BuildContext context) {
-    // Simple regex for common patterns
     final pattern = RegExp(
-      r'(https?://[^\s]+)|(www\.[^\s]+)|(\+?[0-9][\d\s\-()]{7,}[0-9])|([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})',
+      r'(https?://[^\s]+)|(www\.[^\s]+)|(\+?[0-9][\d\s\-(]{7,}[0-9])|([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})',
     );
     final matches = pattern.allMatches(body);
     if (matches.isEmpty) {
-      return SelectableText(
+      return Text(
         body,
         style: TextStyle(color: textColor, fontSize: 15),
-        onTap: () => onTap?.call(message),
       );
     }
 
@@ -254,14 +239,17 @@ class MessageBubble extends StatelessWidget {
       if (m.start > lastEnd) {
         spans.add(TextSpan(text: body.substring(lastEnd, m.start)));
       }
+      final matched = m.group(0)!;
       spans.add(
         TextSpan(
-          text: m.group(0),
+          text: matched,
           style: TextStyle(
             color: textColor,
             decoration: TextDecoration.underline,
             fontWeight: FontWeight.w600,
           ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => _launchUrl(matched),
         ),
       );
       lastEnd = m.end;
@@ -270,13 +258,30 @@ class MessageBubble extends StatelessWidget {
       spans.add(TextSpan(text: body.substring(lastEnd)));
     }
 
-    return SelectableText.rich(
+    return Text.rich(
       TextSpan(
         children: spans,
         style: TextStyle(color: textColor, fontSize: 15),
       ),
-      onTap: () => onTap?.call(message),
     );
+  }
+
+  void _launchUrl(String raw) async {
+    Uri? uri;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      uri = Uri.tryParse(raw);
+    } else if (raw.startsWith('www.')) {
+      uri = Uri.tryParse('https://$raw');
+    } else if (raw.contains('@')) {
+      uri = Uri.tryParse('mailto:$raw');
+    } else {
+      // Phone number
+      final digits = raw.replaceAll(RegExp(r'[\s\-()]'), '');
+      uri = Uri.tryParse('tel:$digits');
+    }
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Widget _statusIcon(Color color) {
@@ -290,7 +295,6 @@ class MessageBubble extends StatelessWidget {
     if (message.isFailed) {
       return Icon(Icons.error_outline, size: 12, color: Colors.red.shade300);
     }
-    // Delivered (double check)
     return Icon(Icons.done_all, size: 12, color: color);
   }
 }

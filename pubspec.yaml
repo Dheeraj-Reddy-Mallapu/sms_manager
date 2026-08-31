@@ -1,0 +1,41 @@
+name: sms_manager
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  bert_tokenizer: ^1.2.0
+  bloc: ^9.2.1
+  dart_sentencepiece_tokenizer: ^1.3.2
+  dynamic_color: ^2.1.0
+  equatable: ^2.1.0
+  flutter_bloc: ^9.1.1
+  flutter_litert: ^3.8.0
+  flutter_sms_inbox: ^1.0.5
+  get_it: ^9.2.1
+  go_router: ^18.0.0
+  intl: ^0.20.3
+  path_provider: ^2.1.6
+  permission_handler: ^13.0.1
+  sqflite: ^2.4.3
+  material_ui: ^1.1.0
+  path: ^1.9.1
+  flutter_localizations:
+    sdk: flutter
+  flutter_local_notifications: ^22.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

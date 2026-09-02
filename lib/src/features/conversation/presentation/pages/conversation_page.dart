@@ -138,7 +138,10 @@ class _ConversationPageState extends State<ConversationPage> {
 
     return BlocConsumer<ConversationBloc, ConversationState>(
       listener: (context, state) {
-        if (state is ConversationLoaded) {
+        if (state is ConversationError) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(state.message)));
+        } else if (state is ConversationLoaded) {
           // Trigger read marking immediately for small conversations that don't scroll
           if (state.messages.any((m) => !m.read && !m.isOutgoing)) {
             _readDebounce?.cancel();
@@ -631,7 +634,31 @@ class _ConversationPageState extends State<ConversationPage> {
   void _onMenuAction(String action) {
     switch (action) {
       case 'delete':
-        // TODO: delete entire thread with confirmation
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Delete conversation'),
+            content: const Text(
+              'This will permanently delete the entire conversation. Are you sure?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(context); // close dialog
+                  context.read<ConversationBloc>().add(
+                    const DeleteConversation(),
+                  );
+                  context.pop(); // exit conversation page
+                },
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        );
         break;
     }
   }

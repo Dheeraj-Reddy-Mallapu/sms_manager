@@ -98,6 +98,10 @@ class SystemMessagesChanged extends ConversationEvent {
   const SystemMessagesChanged();
 }
 
+class DeleteConversation extends ConversationEvent {
+  const DeleteConversation();
+}
+
 class SelectSim extends ConversationEvent {
   final int? subscriptionId;
   const SelectSim(this.subscriptionId);
@@ -116,6 +120,13 @@ abstract class ConversationState extends Equatable {
 class ConversationInitial extends ConversationState {}
 
 class ConversationLoading extends ConversationState {}
+
+class ConversationError extends ConversationState {
+  final String message;
+  const ConversationError(this.message);
+  @override
+  List<Object?> get props => [message];
+}
 
 class ConversationLoaded extends ConversationState {
   /// Messages in display order: oldest first (index 0) → newest last.
@@ -197,13 +208,6 @@ class ConversationLoaded extends ConversationState {
   ];
 }
 
-class ConversationError extends ConversationState {
-  final String message;
-  const ConversationError(this.message);
-  @override
-  List<Object?> get props => [message];
-}
-
 // ── BLoC ─────────────────────────────────────────────────────────────────────
 
 class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
@@ -219,6 +223,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     on<LoadMoreMessages>(_onLoadMoreMessages);
     on<SendMessage>(_onSendMessage);
     on<DeleteMessage>(_onDeleteMessage);
+    on<DeleteConversation>(_onDeleteConversation);
     on<ToggleStarMessage>(_onToggleStar);
     on<SelectMessage>(_onSelectMessage);
     on<ClearSelection>(_onClearSelection);
@@ -416,6 +421,22 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
             .toList(),
       ),
     );
+  }
+
+  Future<void> _onDeleteConversation(
+    DeleteConversation event,
+    Emitter<ConversationState> emit,
+  ) async {
+    final current = state;
+    if (current is! ConversationLoaded) return;
+
+    try {
+      await repository.deleteThread(current.threadId);
+      // We don't emit a new state here; UI will pop itself
+    } catch (e) {
+      emit(ConversationError('Failed to delete conversation: $e'));
+      emit(current);
+    }
   }
 
   // ── Star / Bookmark ────────────────────────────────────────────────────

@@ -182,12 +182,31 @@ class NativeSmsService {
     }
   }
 
+  static Future<bool> markAllAsRead() async {
+    try {
+      return await _queryChannel.invokeMethod<bool>('markAllAsRead') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Delete Message ───────────────────────────────────────────────
 
   static Future<bool> deleteMessage(int messageId) async {
     try {
       return await _queryChannel.invokeMethod<bool>('deleteMessage', {
             'messageId': messageId,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> deleteThread(int threadId) async {
+    try {
+      return await _queryChannel.invokeMethod<bool>('deleteThread', {
+            'threadId': threadId,
           }) ??
           false;
     } catch (_) {
@@ -208,6 +227,29 @@ class NativeSmsService {
       return result != null ? Map<String, dynamic>.from(result) : null;
     } catch (_) {
       return null;
+    }
+  }
+  // ── Contact Logics ───────────────────────────────────────────────
+
+  static Future<bool> openContactCard(String address) async {
+    try {
+      return await _queryChannel.invokeMethod<bool>('openContactCard', {
+            'address': address,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> dialNumber(String address) async {
+    try {
+      return await _queryChannel.invokeMethod<bool>('dialNumber', {
+            'address': address,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
     }
   }
 }

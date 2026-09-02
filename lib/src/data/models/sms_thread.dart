@@ -12,6 +12,7 @@ class SmsThread extends Equatable {
   final String category; // E.g., 'Personal', 'Transactions', 'Promotions'
   final String? contactName;
   final String? contactPhotoUri;
+  final bool hasStarredMessages;
 
   const SmsThread({
     required this.id,
@@ -25,6 +26,7 @@ class SmsThread extends Equatable {
     this.category = 'All',
     this.contactName,
     this.contactPhotoUri,
+    this.hasStarredMessages = false,
   });
 
   factory SmsThread.fromMap(Map<String, dynamic> map) {
@@ -40,6 +42,8 @@ class SmsThread extends Equatable {
       category: map['category'] as String? ?? 'All',
       contactName: map['contactName'] as String?,
       contactPhotoUri: map['contactPhotoUri'] as String?,
+      hasStarredMessages:
+          ((map['hasStarredMessages'] as num?)?.toInt() ?? 0) == 1,
     );
   }
 
@@ -56,6 +60,7 @@ class SmsThread extends Equatable {
       'category': category,
       'contactName': contactName,
       'contactPhotoUri': contactPhotoUri,
+      // hasStarredMessages is derived, not stored directly in threads table usually
     };
   }
 
@@ -97,5 +102,6 @@ class SmsThread extends Equatable {
     category,
     contactName,
     contactPhotoUri,
+    hasStarredMessages,
   ];
 }

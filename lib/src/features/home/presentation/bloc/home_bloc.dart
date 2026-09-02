@@ -48,6 +48,36 @@ class RefreshReadState extends HomeEvent {
   const RefreshReadState();
 }
 
+class ToggleSelectionMode extends HomeEvent {
+  final bool active;
+  const ToggleSelectionMode(this.active);
+  @override
+  List<Object?> get props => [active];
+}
+
+class ToggleThreadSelection extends HomeEvent {
+  final int threadId;
+  const ToggleThreadSelection(this.threadId);
+  @override
+  List<Object?> get props => [threadId];
+}
+
+class ClearHomeSelection extends HomeEvent {
+  const ClearHomeSelection();
+}
+
+class DeleteSelectedThreads extends HomeEvent {
+  const DeleteSelectedThreads();
+}
+
+class MarkSelectedAsRead extends HomeEvent {
+  const MarkSelectedAsRead();
+}
+
+class MarkAllAsRead extends HomeEvent {
+  const MarkAllAsRead();
+}
+
 // ── States ───────────────────────────────────────────────────────────────────
 
 abstract class HomeState extends Equatable {
@@ -65,24 +95,39 @@ class HomeLoaded extends HomeState {
   final String activeCategory;
   final bool isRefreshing; // subtle spinner — keeps threads visible
 
+  final bool isSelectionMode;
+  final Set<int> selectedThreadIds;
+
   const HomeLoaded({
     required this.threads,
     this.activeCategory = 'All',
     this.isRefreshing = false,
+    this.isSelectionMode = false,
+    this.selectedThreadIds = const {},
   });
 
   HomeLoaded copyWith({
     List<SmsThread>? threads,
     String? activeCategory,
     bool? isRefreshing,
+    bool? isSelectionMode,
+    Set<int>? selectedThreadIds,
   }) => HomeLoaded(
     threads: threads ?? this.threads,
     activeCategory: activeCategory ?? this.activeCategory,
     isRefreshing: isRefreshing ?? this.isRefreshing,
+    isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+    selectedThreadIds: selectedThreadIds ?? this.selectedThreadIds,
   );
 
   @override
-  List<Object?> get props => [threads, activeCategory, isRefreshing];
+  List<Object?> get props => [
+    threads,
+    activeCategory,
+    isRefreshing,
+    isSelectionMode,
+    selectedThreadIds,
+  ];
 }
 
 class HomeError extends HomeState {
@@ -111,6 +156,12 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<IncomingSmsReceived>(_onIncomingSms);
     on<RefreshReadState>(_onRefreshReadState);
     on<SystemSmsChanged>(_onSystemSmsChanged);
+    on<ToggleSelectionMode>(_onToggleSelectionMode);
+    on<ToggleThreadSelection>(_onToggleThreadSelection);
+    on<ClearHomeSelection>(_onClearHomeSelection);
+    on<DeleteSelectedThreads>(_onDeleteSelectedThreads);
+    on<MarkSelectedAsRead>(_onMarkSelectedAsRead);
+    on<MarkAllAsRead>(_onMarkAllAsRead);
 
     _incomingSubscription = repository.incomingSmsStream.listen(
       (data) => add(IncomingSmsReceived(data)),
@@ -247,6 +298,136 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     final current = state;
     if (current is HomeLoaded) {
       emit(current.copyWith(activeCategory: event.category));
+    }
+  }
+
+  void _onToggleSelectionMode(
+    ToggleSelectionMode event,
+    Emitter<HomeState> emit,
+  ) {
+    final current = state;
+    if (current is! HomeLoaded) return;
+    emit(
+      current.copyWith(
+        isSelectionMode: event.active,
+        selectedThreadIds: event.active ? current.selectedThreadIds : const {},
+      ),
+    );
+  }
+
+  void _onToggleThreadSelection(
+    ToggleThreadSelection event,
+    Emitter<HomeState> emit,
+  ) {
+    final current = state;
+    if (current is! HomeLoaded) return;
+    final ids = Set<int>.from(current.selectedThreadIds);
+    if (ids.contains(event.threadId)) {
+      ids.remove(event.threadId);
+    } else {
+      ids.add(event.threadId);
+    }
+    emit(
+      current.copyWith(
+        selectedThreadIds: ids,
+        isSelectionMode: ids.isNotEmpty || current.isSelectionMode,
+      ),
+    );
+  }
+
+  void _onClearHomeSelection(
+    ClearHomeSelection event,
+    Emitter<HomeState> emit,
+  ) {
+    final current = state;
+    if (current is! HomeLoaded) return;
+    emit(current.copyWith(isSelectionMode: false, selectedThreadIds: const {}));
+  }
+
+  Future<void> _onDeleteSelectedThreads(
+    DeleteSelectedThreads event,
+    Emitter<HomeState> emit,
+  ) async {
+    final current = state;
+    if (current is! HomeLoaded) return;
+
+    emit(current.copyWith(isRefreshing: true));
+    try {
+      for (final threadId in current.selectedThreadIds) {
+        await repository.deleteThread(threadId);
+      }
+
+      final updated = current.threads
+          .where((t) => !current.selectedThreadIds.contains(t.id))
+          .toList();
+      emit(
+        current.copyWith(
+          threads: updated,
+          isSelectionMode: false,
+          selectedThreadIds: const {},
+          isRefreshing: false,
+        ),
+      );
+    } catch (e) {
+      emit(current.copyWith(isRefreshing: false));
+      emit(HomeError('Failed to delete threads: $e'));
+      emit(current);
+    }
+  }
+
+  Future<void> _onMarkSelectedAsRead(
+    MarkSelectedAsRead event,
+    Emitter<HomeState> emit,
+  ) async {
+    final current = state;
+    if (current is! HomeLoaded) return;
+
+    emit(current.copyWith(isRefreshing: true));
+    try {
+      for (final threadId in current.selectedThreadIds) {
+        await repository.markThreadAsRead(threadId);
+      }
+      // Re-fetch threads from sqlite
+      final threads = await repository.getThreads(
+        limit: 10000,
+        forceSync: false,
+      );
+      emit(
+        current.copyWith(
+          threads: threads,
+          isSelectionMode: false,
+          selectedThreadIds: const {},
+          isRefreshing: false,
+        ),
+      );
+    } catch (e) {
+      emit(current.copyWith(isRefreshing: false));
+      emit(HomeError('Failed to mark as read: $e'));
+      emit(current);
+    }
+  }
+
+  Future<void> _onMarkAllAsRead(
+    MarkAllAsRead event,
+    Emitter<HomeState> emit,
+  ) async {
+    final current = state;
+    if (current is! HomeLoaded) return;
+
+    emit(current.copyWith(isRefreshing: true));
+    try {
+      // Actually we need a repository method for this!
+      // For now, let's call repository.markAllAsRead()
+      await repository.markAllAsRead();
+      final threads = await repository.getThreads(
+        limit: 10000,
+        forceSync: false,
+      );
+      emit(current.copyWith(threads: threads, isRefreshing: false));
+    } catch (e) {
+      emit(current.copyWith(isRefreshing: false));
+      emit(HomeError('Failed to mark all as read: $e'));
+      emit(current);
     }
   }
 

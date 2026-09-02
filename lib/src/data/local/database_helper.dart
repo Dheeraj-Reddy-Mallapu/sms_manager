@@ -193,13 +193,35 @@ CREATE TABLE IF NOT EXISTS app_metadata (
 
   Future<List<SmsThread>> getThreads({int limit = 500, int offset = 0}) async {
     final db = await instance.database;
-    final maps = await db.query(
-      'threads',
-      where: 'isBlocked = 0',
-      orderBy: 'date DESC',
-      limit: limit,
-      offset: offset,
-    );
+    final sql = '''
+      SELECT t.*, 
+             CASE WHEN SUM(m.isStarred) > 0 THEN 1 ELSE 0 END as hasStarredMessages
+      FROM threads t
+      LEFT JOIN messages m ON t.id = m.threadId
+      WHERE t.isBlocked = 0
+      GROUP BY t.id
+      ORDER BY t.date DESC
+      LIMIT ? OFFSET ?
+    ''';
+    final maps = await db.rawQuery(sql, [limit, offset]);
+    return maps.map((m) => SmsThread.fromMap(m)).toList();
+  }
+
+  Future<List<SmsThread>> getThreadsWithStarredMessages({
+    int limit = 500,
+    int offset = 0,
+  }) async {
+    final db = await instance.database;
+    final sql = '''
+      SELECT t.* 
+      FROM threads t
+      INNER JOIN messages m ON t.id = m.threadId
+      WHERE t.isBlocked = 0 AND m.isStarred = 1
+      GROUP BY t.id
+      ORDER BY t.date DESC
+      LIMIT ? OFFSET ?
+    ''';
+    final maps = await db.rawQuery(sql, [limit, offset]);
     return maps.map((m) => SmsThread.fromMap(m)).toList();
   }
 
@@ -211,6 +233,12 @@ CREATE TABLE IF NOT EXISTS app_metadata (
       where: 'id = ?',
       whereArgs: [threadId],
     );
+  }
+
+  Future<void> markAllAsRead() async {
+    final db = await instance.database;
+    await db.update('threads', {'read': 1}, where: 'read = 0');
+    await db.update('messages', {'read': 1}, where: 'read = 0');
   }
 
   Future<void> updateThreadCategory(int threadId, String category) async {

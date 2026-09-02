@@ -235,6 +235,11 @@ class SmsRepository {
     await _db.markThreadRead(threadId);
   }
 
+  Future<void> markAllAsRead() async {
+    await NativeSmsService.markAllAsRead();
+    await _db.markAllAsRead();
+  }
+
   Future<void> deleteMessageById(int messageId) async {
     await NativeSmsService.deleteMessage(messageId);
     await _db.deleteMessage(messageId);
@@ -245,6 +250,7 @@ class SmsRepository {
   }
 
   Future<void> deleteThread(int threadId) async {
+    await NativeSmsService.deleteThread(threadId);
     await _db.deleteThread(threadId);
   }
 }

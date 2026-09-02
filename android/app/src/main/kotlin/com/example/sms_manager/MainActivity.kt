@@ -160,15 +160,27 @@ class MainActivity : FlutterActivity() {
                                     android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
                                 )
 
+                                val deliveryIntentObj = android.content.Intent(this@MainActivity, SmsDeliveredReceiver::class.java)
+                                deliveryIntentObj.action = "com.example.sms_manager.SMS_DELIVERED"
+                                deliveryIntentObj.putExtra("message_uri", uri?.toString() ?: "")
+                                val deliveryIntent = android.app.PendingIntent.getBroadcast(
+                                    this@MainActivity,
+                                    requestCode,
+                                    deliveryIntentObj,
+                                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                                )
+
                                 val parts = smsManager.divideMessage(body)
                                 if (parts.size == 1) {
-                                    smsManager.sendTextMessage(address, null, body, sentIntent, null)
+                                    smsManager.sendTextMessage(address, null, body, sentIntent, deliveryIntent)
                                 } else {
                                     val sentIntents = ArrayList<android.app.PendingIntent>()
+                                    val deliveryIntents = ArrayList<android.app.PendingIntent>()
                                     for (i in parts.indices) {
                                         sentIntents.add(sentIntent)
+                                        deliveryIntents.add(deliveryIntent)
                                     }
-                                    smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, null)
+                                    smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, deliveryIntents)
                                 }
                                 
                                 val nativeId = uri?.lastPathSegment?.toIntOrNull() ?: -1
@@ -233,6 +245,24 @@ class MainActivity : FlutterActivity() {
                         }.start()
                     }
 
+                    "markAllAsRead" -> {
+                        Thread {
+                            try {
+                                val values = android.content.ContentValues().apply {
+                                    put(Telephony.Sms.READ, 1)
+                                }
+                                val updated = contentResolver.update(
+                                    Telephony.Sms.CONTENT_URI, values,
+                                    "${Telephony.Sms.READ} = 0",
+                                    null
+                                )
+                                runOnUiThread { result.success(updated > 0) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("UPDATE_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
                     "deleteMessage" -> {
                         val messageId = call.argument<Any>("messageId")?.toString()?.toLongOrNull()
                         if (messageId == null) {
@@ -251,6 +281,88 @@ class MainActivity : FlutterActivity() {
                                 runOnUiThread { result.error("DELETE_ERROR", e.message, null) }
                             }
                         }.start()
+                    }
+
+                    "deleteThread" -> {
+                        val threadId = call.argument<Any>("threadId")?.toString()?.toLongOrNull()
+                        if (threadId == null) {
+                            result.error("INVALID_ARGUMENT", "threadId required", null)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            try {
+                                val deleted = contentResolver.delete(
+                                    Telephony.Threads.CONTENT_URI,
+                                    "${Telephony.Threads._ID} = ?",
+                                    arrayOf(threadId.toString())
+                                )
+                                runOnUiThread { result.success(deleted > 0) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("DELETE_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
+                    "openContactCard" -> {
+                        val address = call.argument<String>("address")
+                        if (address.isNullOrEmpty()) {
+                            result.error("INVALID_ARGUMENT", "address required", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val uri = android.net.Uri.withAppendedPath(
+                                android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                                android.net.Uri.encode(address)
+                            )
+                            val cursor = contentResolver.query(
+                                uri,
+                                arrayOf(android.provider.ContactsContract.PhoneLookup._ID),
+                                null, null, null
+                            )
+                            var contactId: String? = null
+                            cursor?.use {
+                                if (it.moveToFirst()) {
+                                    contactId = it.getString(0)
+                                }
+                            }
+                            if (contactId != null) {
+                                val contactUri = android.content.ContentUris.withAppendedId(
+                                    android.provider.ContactsContract.Contacts.CONTENT_URI,
+                                    contactId!!.toLong()
+                                )
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, contactUri)
+                                intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                startActivity(intent)
+                                result.success(true)
+                            } else {
+                                // Fallback: try to add contact
+                                val intent = android.content.Intent(android.content.Intent.ACTION_INSERT)
+                                intent.type = android.provider.ContactsContract.RawContacts.CONTENT_TYPE
+                                intent.putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, address)
+                                intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                startActivity(intent)
+                                result.success(true)
+                            }
+                        } catch (e: Exception) {
+                            result.error("CONTACT_ERROR", e.message, null)
+                        }
+                    }
+
+                    "dialNumber" -> {
+                        val address = call.argument<String>("address")
+                        if (address.isNullOrEmpty()) {
+                            result.error("INVALID_ARGUMENT", "address required", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_DIAL)
+                            intent.data = android.net.Uri.parse("tel:$address")
+                            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("DIAL_ERROR", e.message, null)
+                        }
                     }
 
                     "getContactPhoto" -> {

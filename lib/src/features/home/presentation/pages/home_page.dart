@@ -6,6 +6,7 @@ import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/features/home/presentation/bloc/home_bloc.dart';
 import 'package:sms_manager/src/core/widgets/timeline_scrollbar.dart';
 import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
+import 'package:sms_manager/src/services/native_sms_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -45,11 +46,18 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: SafeArea(
-        child: BlocBuilder<HomeBloc, HomeState>(
+        child: BlocConsumer<HomeBloc, HomeState>(
+          listener: (context, state) {
+            if (state is HomeError) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(state.message)));
+            }
+          },
           builder: (context, state) {
             if (state is HomeInitial || state is HomeLoading) {
               return const Center(child: CircularProgressIndicator());
             } else if (state is HomeError) {
+              // This handles the initial load error, while the listener handles transient errors
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
@@ -119,56 +127,90 @@ class _HomePageState extends State<HomePage> {
         controller: _scrollController,
         slivers: [
           // Persistent App Bar (OneUI style)
-          SliverAppBar(
-            pinned: true,
-            floating: false,
-            expandedHeight: 120,
-            backgroundColor: colorScheme.surface,
-            surfaceTintColor: Colors.transparent,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.search),
-                onPressed: () {},
-                tooltip: 'Search',
+          if (state.isSelectionMode)
+            SliverAppBar(
+              pinned: true,
+              backgroundColor: colorScheme.secondaryContainer,
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () =>
+                    context.read<HomeBloc>().add(const ClearHomeSelection()),
               ),
-              IconButton(
-                icon: const Icon(Icons.more_vert),
-                onPressed: () => _showMoreSheet(context, colorScheme),
-                tooltip: 'More',
+              title: Text(
+                '${state.selectedThreadIds.length} selected',
+                style: TextStyle(color: colorScheme.onSecondaryContainer),
               ),
-              const SizedBox(width: 8),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-              title: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _greeting(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                      fontSize: 20,
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        unreadCount > 0 ? '$unreadCount unread' : 'All read',
-                        style: TextStyle(
-                          color: colorScheme.onSurfaceVariant,
-                          fontSize: 11,
-                          fontWeight: FontWeight.normal,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Delete',
+                  onPressed: state.selectedThreadIds.isEmpty
+                      ? null
+                      : () => _showDeleteSelectionDialog(context, state),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.mark_email_read_outlined),
+                  tooltip: 'Mark as read',
+                  onPressed: state.selectedThreadIds.isEmpty
+                      ? null
+                      : () => context.read<HomeBloc>().add(
+                          const MarkSelectedAsRead(),
                         ),
+                ),
+                const SizedBox(width: 8),
+              ],
+            )
+          else
+            SliverAppBar(
+              pinned: true,
+              floating: false,
+              expandedHeight: 120,
+              backgroundColor: colorScheme.surface,
+              surfaceTintColor: Colors.transparent,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {},
+                  tooltip: 'Search',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: () => _showMoreSheet(context, colorScheme),
+                  tooltip: 'More',
+                ),
+                const SizedBox(width: 8),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                title: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _greeting(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                        fontSize: 20,
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          unreadCount > 0 ? '$unreadCount unread' : 'All read',
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
+                            fontSize: 11,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
 
           // Category chips
           SliverPadding(
@@ -205,6 +247,7 @@ class _HomePageState extends State<HomePage> {
                     delegate: SliverChildBuilderDelegate(
                       (context, index) => _buildThreadTile(
                         context,
+                        state,
                         filteredThreads[index],
                         colorScheme,
                       ),
@@ -225,6 +268,8 @@ class _HomePageState extends State<HomePage> {
         return threads.where((t) => t.contactName != null).toList();
       case 'Transactions':
         return threads.where((t) => t.category == 'Transactions').toList();
+      case 'Starred':
+        return threads.where((t) => t.hasStarredMessages).toList();
       default:
         return threads;
     }
@@ -235,7 +280,7 @@ class _HomePageState extends State<HomePage> {
     HomeLoaded state,
     ColorScheme colorScheme,
   ) {
-    final categories = ['All', 'Unread', 'Personal', 'Transactions'];
+    final categories = ['All', 'Unread', 'Personal', 'Transactions', 'Starred'];
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -305,6 +350,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildThreadTile(
     BuildContext context,
+    HomeLoaded state,
     SmsThread thread,
     ColorScheme colorScheme,
   ) {
@@ -317,14 +363,27 @@ class _HomePageState extends State<HomePage> {
     final isUnread = !thread.read;
     final timeString = _formatDate(thread.date);
 
+    final isSelected = state.selectedThreadIds.contains(thread.id);
+
     return InkWell(
-      onTap: () => context.go('/home/conversation/${thread.id}', extra: thread),
+      onLongPress: () {
+        context.read<HomeBloc>().add(ToggleThreadSelection(thread.id));
+      },
+      onTap: () {
+        if (state.isSelectionMode) {
+          context.read<HomeBloc>().add(ToggleThreadSelection(thread.id));
+        } else {
+          context.go('/home/conversation/${thread.id}', extra: thread);
+        }
+      },
       borderRadius: BorderRadius.circular(12),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
-          color: isUnread
+          color: isSelected
+              ? colorScheme.primaryContainer
+              : isUnread
               ? colorScheme.primaryContainer.withAlpha(60)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
@@ -333,8 +392,40 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             GestureDetector(
-              onTap: () => _showContactSheet(context, thread, colorScheme),
-              child: SmartAvatar(thread: thread, radius: 24),
+              onTap: () {
+                if (state.isSelectionMode) {
+                  context.read<HomeBloc>().add(
+                    ToggleThreadSelection(thread.id),
+                  );
+                } else {
+                  _showContactSheet(context, thread, colorScheme);
+                }
+              },
+              child: Stack(
+                children: [
+                  SmartAvatar(thread: thread, radius: 24),
+                  if (isSelected)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: colorScheme.surface,
+                            width: 2,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.check,
+                          size: 14,
+                          color: colorScheme.onPrimary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -457,7 +548,28 @@ class _HomePageState extends State<HomePage> {
                 title: const Text('Mark all as read'),
                 onTap: () {
                   Navigator.pop(context);
-                  // TODO: Implement mark all as read
+                  showDialog(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('Mark all as read?'),
+                      content: const Text(
+                        'This will mark all messages as read.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            context.read<HomeBloc>().add(const MarkAllAsRead());
+                          },
+                          child: const Text('Mark Read'),
+                        ),
+                      ],
+                    ),
+                  );
                 },
               ),
               ListTile(
@@ -489,6 +601,31 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       },
+    );
+  }
+
+  void _showDeleteSelectionDialog(BuildContext context, HomeLoaded state) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Delete ${state.selectedThreadIds.length} conversations?'),
+        content: const Text(
+          'This will permanently delete the selected conversations and all their messages. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.read<HomeBloc>().add(const DeleteSelectedThreads());
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -541,7 +678,7 @@ class _HomePageState extends State<HomePage> {
                     label: 'Call',
                     onTap: () {
                       Navigator.pop(context);
-                      // TODO: Launch dialer
+                      NativeSmsService.dialNumber(address);
                     },
                   ),
                   _actionButton(
@@ -564,7 +701,7 @@ class _HomePageState extends State<HomePage> {
                     label: isContact ? 'View' : 'Add',
                     onTap: () {
                       Navigator.pop(context);
-                      // TODO: Open contact card
+                      NativeSmsService.openContactCard(address);
                     },
                   ),
                 ],

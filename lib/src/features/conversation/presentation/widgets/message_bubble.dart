@@ -293,6 +293,9 @@ class MessageBubble extends StatelessWidget {
         child: CircularProgressIndicator(strokeWidth: 1.5, color: color),
       );
     }
-    return Icon(Icons.done_all, size: 12, color: color);
+    if (message.isDelivered) {
+      return Icon(Icons.done_all, size: 12, color: color); // Delivered
+    }
+    return Icon(Icons.done, size: 12, color: color); // Sent but not delivered
   }
 }

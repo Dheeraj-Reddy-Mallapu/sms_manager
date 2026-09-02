@@ -1,4 +1,4 @@
-package com.example.sms_manager
+package com.dheeru.sms_manager
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -21,23 +21,8 @@ class SmsReplyReceiver : BroadcastReceiver() {
         Log.d("SmsReplyReceiver", "Inline reply to $address: ${replyText.take(30)}")
 
         try {
-            val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                context.getSystemService(android.telephony.SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                android.telephony.SmsManager.getDefault()
-            }
-            smsManager.sendTextMessage(address, null, replyText, null, null)
-
-            // Save to sent box
-            val values = android.content.ContentValues().apply {
-                put(Telephony.Sms.ADDRESS, address)
-                put(Telephony.Sms.BODY, replyText)
-                put(Telephony.Sms.DATE, System.currentTimeMillis())
-                put(Telephony.Sms.READ, 1)
-                put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
-            }
-            context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+            // Send SMS via our unified SmsSender which handles multipart and delivery tracking
+            SmsSender.sendSms(context, address, replyText, null)
 
             // Dismiss the notification
             NotificationManagerCompat.from(context).cancel(address.hashCode())

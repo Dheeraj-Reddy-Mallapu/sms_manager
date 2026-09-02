@@ -194,19 +194,6 @@ class _HomePageState extends State<HomePage> {
                         fontSize: 20,
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          unreadCount > 0 ? '$unreadCount unread' : 'All read',
-                          style: TextStyle(
-                            color: colorScheme.onSurfaceVariant,
-                            fontSize: 11,
-                            fontWeight: FontWeight.normal,
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
@@ -291,13 +278,17 @@ class _HomePageState extends State<HomePage> {
               ? state.threads.where((t) => !t.read).length
               : 0;
 
+          final displayLabel = category == 'All' 
+              ? 'All (${state.threads.length})' 
+              : category;
+
           return Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: FilterChip(
               label: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(category),
+                  Text(displayLabel),
                   if (category == 'Unread' && unreadForChip > 0) ...[
                     const SizedBox(width: 6),
                     Container(
@@ -383,8 +374,6 @@ class _HomePageState extends State<HomePage> {
         decoration: BoxDecoration(
           color: isSelected
               ? colorScheme.primaryContainer
-              : isUnread
-              ? colorScheme.primaryContainer.withAlpha(60)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),

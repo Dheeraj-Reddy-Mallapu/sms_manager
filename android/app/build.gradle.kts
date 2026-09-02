@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.sms_manager"
+    namespace = "com.dheeru.sms_manager"
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 

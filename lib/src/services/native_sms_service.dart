@@ -71,6 +71,17 @@ class NativeSmsService {
     }
   }
 
+  static Future<bool> pushShortcuts(List<Map<String, dynamic>> threads) async {
+    try {
+      final success = await _queryChannel.invokeMethod<bool>('pushShortcuts', {
+        'threads': threads,
+      });
+      return success ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Contacts ──────────────────────────────────────────────────────
 
   static Future<List<Map<String, String>>> searchContacts(String query) async {

@@ -1,4 +1,4 @@
-package com.example.sms_manager
+package com.dheeru.sms_manager
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -22,7 +22,7 @@ class SmsReceiver : BroadcastReceiver() {
         const val TAG = "SmsReceiver"
         const val CHANNEL_ID = "sms_incoming"
         const val KEY_REPLY_TEXT = "sms_reply_text"
-        const val ACTION_REPLY = "com.example.sms_manager.ACTION_REPLY"
+        const val ACTION_REPLY = "com.dheeru.sms_manager.ACTION_REPLY"
 
         // EventChannel sink — set by MainActivity
         var incomingSink: io.flutter.plugin.common.EventChannel.EventSink? = null

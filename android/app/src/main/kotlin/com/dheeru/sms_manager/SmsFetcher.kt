@@ -1,4 +1,4 @@
-package com.example.sms_manager
+package com.dheeru.sms_manager
 
 import android.content.Context
 import android.net.Uri

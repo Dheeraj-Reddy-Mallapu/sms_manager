@@ -122,7 +122,7 @@
             android:name=".SmsSentReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.sms_manager.SMS_SENT" />
+                <action android:name="com.dheeru.sms_manager.SMS_SENT" />
             </intent-filter>
         </receiver>
 
@@ -130,7 +130,7 @@
             android:name=".SmsDeliveredReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.sms_manager.SMS_DELIVERED" />
+                <action android:name="com.dheeru.sms_manager.SMS_DELIVERED" />
             </intent-filter>
         </receiver>
         

@@ -1,4 +1,4 @@
-package com.example.sms_manager
+package com.dheeru.sms_manager
 
 import android.app.role.RoleManager
 import android.content.Context
@@ -435,6 +435,61 @@ class MainActivity : FlutterActivity() {
                                 runOnUiThread { result.error("THREAD_ERROR", e.message, null) }
                             }
                         }.start()
+                    }
+
+                    "pushShortcuts" -> {
+                        val threads = call.argument<List<Map<String, Any>>>("threads")
+                        if (threads == null) {
+                            result.error("INVALID_ARGUMENT", "threads required", null)
+                            return@setMethodCallHandler
+                        }
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N_MR1) {
+                            Thread {
+                                try {
+                                    val shortcutManager = getSystemService(android.content.pm.ShortcutManager::class.java)
+                                    val shortcuts = mutableListOf<android.content.pm.ShortcutInfo>()
+                                    
+                                    for (thread in threads) {
+                                        val threadId = thread["threadId"]?.toString() ?: continue
+                                        val address = thread["address"]?.toString() ?: continue
+                                        val name = thread["contactName"]?.toString() ?: address
+                                        
+                                        // For direct share, we need a Person object (Android P+)
+                                        var person: android.app.Person? = null
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                                            person = android.app.Person.Builder()
+                                                .setName(name)
+                                                .setUri("tel:$address")
+                                                .build()
+                                        }
+
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("app://smsmanager/conversation/$threadId"))
+                                        intent.setClass(this@MainActivity, MainActivity::class.java)
+
+                                        val builder = android.content.pm.ShortcutInfo.Builder(this@MainActivity, "thread_$threadId")
+                                            .setShortLabel(name)
+                                            .setLongLabel(name)
+                                            .setIcon(android.graphics.drawable.Icon.createWithResource(this@MainActivity, android.R.drawable.ic_menu_myplaces))
+                                            .setIntent(intent)
+                                            .setCategories(setOf("android.shortcut.conversation"))
+                                            
+                                        if (person != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                            builder.setPerson(person)
+                                            builder.setLongLived(true) // Required for sharing shortcuts in some launchers
+                                        }
+
+                                        shortcuts.add(builder.build())
+                                    }
+                                    
+                                    shortcutManager?.dynamicShortcuts = shortcuts
+                                    runOnUiThread { result.success(true) }
+                                } catch (e: Exception) {
+                                    runOnUiThread { result.error("SHORTCUT_ERROR", e.message, null) }
+                                }
+                            }.start()
+                        } else {
+                            result.success(false) // Not supported below API 25
+                        }
                     }
 
                     "searchContacts" -> {

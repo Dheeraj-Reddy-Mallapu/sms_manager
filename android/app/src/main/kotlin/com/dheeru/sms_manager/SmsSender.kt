@@ -1,4 +1,4 @@
-package com.example.sms_manager
+package com.dheeru.sms_manager
 
 import android.app.PendingIntent
 import android.content.ContentValues
@@ -43,7 +43,7 @@ object SmsSender {
             val uri = context.contentResolver.insert(Telephony.Sms.Outbox.CONTENT_URI, values)
 
             val intent = Intent(context, SmsSentReceiver::class.java)
-            intent.action = "com.example.sms_manager.SMS_SENT"
+            intent.action = "com.dheeru.sms_manager.SMS_SENT"
             intent.putExtra("message_uri", uri?.toString() ?: "")
             
             val requestCode = uri?.lastPathSegment?.toIntOrNull() ?: System.currentTimeMillis().toInt()
@@ -55,7 +55,7 @@ object SmsSender {
             )
 
             val deliveryIntentObj = Intent(context, SmsDeliveredReceiver::class.java)
-            deliveryIntentObj.action = "com.example.sms_manager.SMS_DELIVERED"
+            deliveryIntentObj.action = "com.dheeru.sms_manager.SMS_DELIVERED"
             deliveryIntentObj.putExtra("message_uri", uri?.toString() ?: "")
             val deliveryIntent = PendingIntent.getBroadcast(
                 context,

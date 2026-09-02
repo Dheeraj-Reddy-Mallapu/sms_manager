@@ -4,6 +4,7 @@ import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/data/repositories/sms_repository.dart';
+import 'package:sms_manager/src/services/native_sms_service.dart';
 
 // ── Events ───────────────────────────────────────────────────────────────────
 
@@ -256,6 +257,15 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   ) {
     final current = state;
     final category = current is HomeLoaded ? current.activeCategory : 'All';
+    
+    // Push top 4 threads to native for dynamic shortcuts / Direct Share
+    final topThreads = event.threads.take(4).map((t) => {
+      'threadId': t.id,
+      'address': t.address,
+      'contactName': t.contactName ?? t.address,
+    }).toList();
+    NativeSmsService.pushShortcuts(topThreads);
+
     emit(
       HomeLoaded(
         threads: event.threads,

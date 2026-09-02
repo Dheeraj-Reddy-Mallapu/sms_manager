@@ -1,4 +1,4 @@
-package com.example.sms_manager
+package com.dheeru.sms_manager
 
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -14,7 +14,7 @@ class SmsSentReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != "com.example.sms_manager.SMS_SENT") return
+        if (intent.action != "com.dheeru.sms_manager.SMS_SENT") return
 
         val messageUriString = intent.getStringExtra("message_uri") ?: return
         val messageUri = Uri.parse(messageUriString)

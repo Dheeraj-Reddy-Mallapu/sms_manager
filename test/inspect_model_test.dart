@@ -3,7 +3,6 @@ import 'package:flutter_litert/flutter_litert.dart';
 
 import 'dart:io';
 
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

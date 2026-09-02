@@ -77,6 +77,20 @@ class MainActivity : FlutterActivity() {
                         }.start()
                     }
 
+                    "fetchThreadsSince" -> {
+                        val timestamp = call.argument<Any>("timestamp")?.toString()?.toLongOrNull() ?: 0L
+                        val limit     = call.argument<Any>("limit")?.toString()?.toIntOrNull()  ?: 1000
+                        Thread {
+                            try {
+                                val threads = SmsFetcher.fetchThreadsSince(this, timestamp, limit)
+                                runOnUiThread { result.success(threads) }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "fetchThreadsSince error", e)
+                                runOnUiThread { result.error("FETCH_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
                     "fetchMessages" -> {
                         val threadId = call.argument<Any>("threadId")?.toString()?.toLongOrNull()
                         val limit    = call.argument<Any>("limit")?.toString()?.toIntOrNull()  ?: 200
@@ -122,22 +136,43 @@ class MainActivity : FlutterActivity() {
                                     }
                                 }
 
-                                val parts = smsManager.divideMessage(body)
-                                if (parts.size == 1) {
-                                    smsManager.sendTextMessage(address, null, body, null, null)
-                                } else {
-                                    smsManager.sendMultipartTextMessage(address, null, parts, null, null)
-                                }
-
                                 val values = android.content.ContentValues().apply {
                                     put(Telephony.Sms.ADDRESS, address)
                                     put(Telephony.Sms.BODY,    body)
                                     put(Telephony.Sms.DATE,    System.currentTimeMillis())
                                     put(Telephony.Sms.READ,    1)
-                                    put(Telephony.Sms.TYPE,    Telephony.Sms.MESSAGE_TYPE_SENT)
+                                    put(Telephony.Sms.TYPE,    Telephony.Sms.MESSAGE_TYPE_OUTBOX) // Insert as OUTBOX initially!
+                                    if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                                        put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
+                                    }
                                 }
-                                contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
-                                runOnUiThread { result.success(true) }
+                                val uri = contentResolver.insert(Telephony.Sms.Outbox.CONTENT_URI, values)
+
+                                val intent = android.content.Intent(this@MainActivity, SmsSentReceiver::class.java)
+                                intent.action = "com.example.sms_manager.SMS_SENT"
+                                intent.putExtra("message_uri", uri?.toString() ?: "")
+                                // Use a unique request code (msgId) to prevent PendingIntents from overwriting each other
+                                val requestCode = uri?.lastPathSegment?.toIntOrNull() ?: System.currentTimeMillis().toInt()
+                                val sentIntent = android.app.PendingIntent.getBroadcast(
+                                    this@MainActivity,
+                                    requestCode,
+                                    intent,
+                                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                                )
+
+                                val parts = smsManager.divideMessage(body)
+                                if (parts.size == 1) {
+                                    smsManager.sendTextMessage(address, null, body, sentIntent, null)
+                                } else {
+                                    val sentIntents = ArrayList<android.app.PendingIntent>()
+                                    for (i in parts.indices) {
+                                        sentIntents.add(sentIntent)
+                                    }
+                                    smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, null)
+                                }
+                                
+                                val nativeId = uri?.lastPathSegment?.toIntOrNull() ?: -1
+                                runOnUiThread { result.success(nativeId) }
                             } catch (e: Exception) {
                                 runOnUiThread { result.error("SEND_ERROR", e.message, null) }
                             }
@@ -154,12 +189,18 @@ class MainActivity : FlutterActivity() {
                                 } catch (e: SecurityException) {
                                     null
                                 }
+                                val defaultSmsSubId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                    android.telephony.SmsManager.getDefaultSmsSubscriptionId()
+                                } else {
+                                    -1
+                                }
                                 activeSubscriptions?.forEach { info ->
                                     simInfoList.add(mapOf(
                                         "subscriptionId" to info.subscriptionId,
                                         "simSlotIndex"   to info.simSlotIndex,
                                         "displayName"    to (info.displayName?.toString() ?: "SIM ${info.simSlotIndex + 1}"),
-                                        "number"         to (info.number ?: "")
+                                        "number"         to (info.number ?: ""),
+                                        "isDefault"      to (info.subscriptionId == defaultSmsSubId)
                                     ))
                                 }
                             }

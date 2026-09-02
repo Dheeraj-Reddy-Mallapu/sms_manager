@@ -57,6 +57,7 @@ abstract class HomeState extends Equatable {
 }
 
 class HomeInitial extends HomeState {}
+
 class HomeLoading extends HomeState {}
 
 class HomeLoaded extends HomeState {
@@ -75,10 +76,10 @@ class HomeLoaded extends HomeState {
     String? activeCategory,
     bool? isRefreshing,
   }) => HomeLoaded(
-        threads:        threads        ?? this.threads,
-        activeCategory: activeCategory ?? this.activeCategory,
-        isRefreshing:   isRefreshing   ?? this.isRefreshing,
-      );
+    threads: threads ?? this.threads,
+    activeCategory: activeCategory ?? this.activeCategory,
+    isRefreshing: isRefreshing ?? this.isRefreshing,
+  );
 
   @override
   List<Object?> get props => [threads, activeCategory, isRefreshing];
@@ -133,9 +134,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       return;
     }
     _lastSystemChange = now;
-    // When the system DB changes (e.g. after sending an SMS), we only need 
-    // to sync the most recent threads to be fast.
-    add(const LoadThreads(forceSync: true, syncLimit: 20));
+    // System DB changed (e.g., incoming SMS or deleted externally).
+    // Do a quick smart sync to catch new messages, then reload UI.
+    await repository.smartSync(maxLimit: 1000, chunkSize: 50);
+    final cached = await repository.getThreads(limit: 10000, forceSync: false);
+    add(BackgroundRefreshCompleted(cached));
   }
 
   Future<void> _onLoadThreads(
@@ -153,37 +156,38 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     }
 
     try {
-      // Load all from SQLite (fast local cache)
+      // 1. Instantly load all from SQLite (fast local cache)
       final cached = await repository.getThreads(
         limit: 10000,
         forceSync: false,
       );
 
       final category = current is HomeLoaded ? current.activeCategory : 'All';
-      emit(HomeLoaded(threads: cached, activeCategory: category, isRefreshing: false));
+      emit(
+        HomeLoaded(
+          threads: cached,
+          activeCategory: category,
+          isRefreshing: false,
+        ),
+      );
 
       if (event.forceSync) {
-        // Fast delta sync when an SMS is sent/received
-        await repository.backgroundRefresh(limit: event.syncLimit ?? 50);
-        final allThreads = await repository.getThreads(limit: 10000, forceSync: false);
+        // Fast smart sync for manual refreshes
+        await repository.smartSync();
+        final allThreads = await repository.getThreads(
+          limit: 10000,
+          forceSync: false,
+        );
         add(BackgroundRefreshCompleted(allThreads));
       } else {
-        // Normal app launch: do a paginated sync to catch up or fill DB seamlessly
-        // We sync up to 10000, but in chunks of 50. This way the user sees the first 50
-        // almost instantly on first install, and the rest fill in seamlessly.
-        // (For a production app you might only paginate fully if cache is empty, 
-        // and just do a small sync if cache is full, but we will paginate fully here)
-        final stream = repository.syncThreadsPaginated(maxLimit: 10000, chunkSize: 50);
+        // Normal app launch: do smart paginated sync
+        final stream = repository.syncThreadsPaginated(
+          maxLimit: 10000,
+          chunkSize: 50,
+        );
         await for (final updatedThreads in stream) {
           if (isClosed) break;
-          // Emit each chunk as it arrives
           add(BackgroundRefreshCompleted(updatedThreads));
-          
-          // Optimization: if cache was already full, maybe we only need one chunk to catch up
-          if (cached.isNotEmpty && updatedThreads.length == cached.length) {
-            // We could break early here if we implemented a proper SyncManager, 
-            // but we'll let it paginate.
-          }
         }
       }
     } catch (e) {
@@ -201,11 +205,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   ) {
     final current = state;
     final category = current is HomeLoaded ? current.activeCategory : 'All';
-    emit(HomeLoaded(
-      threads:        event.threads,
-      activeCategory: category,
-      isRefreshing:   false,
-    ));
+    emit(
+      HomeLoaded(
+        threads: event.threads,
+        activeCategory: category,
+        isRefreshing: false,
+      ),
+    );
   }
 
   /// Fast SQLite-only refresh — no native call, near-instant.
@@ -218,7 +224,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       // Small delay to allow ConversationBloc's async DB write to complete
       await Future.delayed(const Duration(milliseconds: 150));
-      final updated = await repository.getThreads(limit: 10000, forceSync: false);
+      final updated = await repository.getThreads(
+        limit: 10000,
+        forceSync: false,
+      );
       emit(current.copyWith(threads: updated, isRefreshing: false));
     } catch (_) {}
   }

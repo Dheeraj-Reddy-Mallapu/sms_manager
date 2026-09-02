@@ -118,8 +118,9 @@ class MessageBubble extends StatelessWidget {
           right: isOut ? 8 : 48,
         ),
         child: Row(
-          mainAxisAlignment:
-              isOut ? MainAxisAlignment.end : MainAxisAlignment.start,
+          mainAxisAlignment: isOut
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Flexible(
@@ -227,10 +228,7 @@ class MessageBubble extends StatelessWidget {
     );
     final matches = pattern.allMatches(body);
     if (matches.isEmpty) {
-      return Text(
-        body,
-        style: TextStyle(color: textColor, fontSize: 15),
-      );
+      return Text(body, style: TextStyle(color: textColor, fontSize: 15));
     }
 
     final spans = <InlineSpan>[];
@@ -248,8 +246,7 @@ class MessageBubble extends StatelessWidget {
             decoration: TextDecoration.underline,
             fontWeight: FontWeight.w600,
           ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => _launchUrl(matched),
+          recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(matched),
         ),
       );
       lastEnd = m.end;
@@ -285,15 +282,16 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _statusIcon(Color color) {
-    if (message.isOptimistic) {
+    if (message.isFailed) {
+      return Icon(Icons.error_outline, size: 12, color: Colors.red.shade300);
+    }
+    if (message.type == 4 || message.type == 6) {
+      // Outbox (Sending) or Queued
       return SizedBox(
         width: 10,
         height: 10,
         child: CircularProgressIndicator(strokeWidth: 1.5, color: color),
       );
-    }
-    if (message.isFailed) {
-      return Icon(Icons.error_outline, size: 12, color: Colors.red.shade300);
     }
     return Icon(Icons.done_all, size: 12, color: color);
   }

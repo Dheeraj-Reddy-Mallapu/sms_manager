@@ -228,8 +228,7 @@ class _MessageSheetState extends State<MessageSheet> {
             decoration: TextDecoration.underline,
             fontWeight: FontWeight.w600,
           ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => _launchUrl(matched),
+          recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(matched),
         ),
       );
       lastEnd = m.end;
@@ -279,8 +278,8 @@ class _MessageSheetState extends State<MessageSheet> {
         MapEntry('Sent from', _resolveSimLabel()),
       ],
       MapEntry('Date', dateStr),
-      MapEntry('Type', _typeName(message.type)),
-      MapEntry('Read', message.read ? 'Yes' : 'No'),
+      MapEntry('Status', _typeName(message.type)),
+      if (!message.isOutgoing) MapEntry('Read', message.read ? 'Yes' : 'No'),
       MapEntry('Length', lengthLabel),
       if (message.isStarred) const MapEntry('Starred', 'Yes'),
     ];
@@ -341,8 +340,7 @@ class _MessageSheetState extends State<MessageSheet> {
     bool isDestructive = false,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final color =
-        isDestructive ? colorScheme.error : colorScheme.onSurface;
+    final color = isDestructive ? colorScheme.error : colorScheme.onSurface;
     final bg = isDestructive
         ? colorScheme.errorContainer.withAlpha(80)
         : colorScheme.surfaceContainerHighest;
@@ -387,13 +385,13 @@ class _MessageSheetState extends State<MessageSheet> {
   String _typeName(int type) {
     switch (type) {
       case 1:
-        return 'Inbox';
+        return 'Received';
       case 2:
         return 'Sent';
       case 3:
         return 'Draft';
       case 4:
-        return 'Outbox';
+        return 'Sending';
       case 5:
         return 'Failed';
       case 6:

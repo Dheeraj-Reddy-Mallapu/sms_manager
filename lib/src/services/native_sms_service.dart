@@ -16,11 +16,15 @@ class NativeSmsService {
   }
 
   // ── Singleton stream for DB system changes ──
-  static const _systemChangesChannel = EventChannel('sms_manager/system_changes');
+  static const _systemChangesChannel = EventChannel(
+    'sms_manager/system_changes',
+  );
   static Stream<void>? _systemChangesStream;
 
   static Stream<void> get systemSmsChanges {
-    _systemChangesStream ??= _systemChangesChannel.receiveBroadcastStream().map((_) {});
+    _systemChangesStream ??= _systemChangesChannel.receiveBroadcastStream().map(
+      (_) {},
+    );
     return _systemChangesStream!;
   }
 
@@ -36,7 +40,8 @@ class NativeSmsService {
 
   static Future<bool> requestDefaultSmsRole() async {
     try {
-      return await _roleChannel.invokeMethod<bool>('requestDefaultSmsRole') ?? false;
+      return await _roleChannel.invokeMethod<bool>('requestDefaultSmsRole') ??
+          false;
     } catch (_) {
       return false;
     }
@@ -46,13 +51,17 @@ class NativeSmsService {
 
   static Future<void> setActiveThread(int? threadId) async {
     try {
-      await _queryChannel.invokeMethod('setActiveThread', {'threadId': threadId});
+      await _queryChannel.invokeMethod('setActiveThread', {
+        'threadId': threadId,
+      });
     } catch (_) {}
   }
 
   static Future<int?> getOrCreateThreadId(String address) async {
     try {
-      final id = await _queryChannel.invokeMethod('getOrCreateThreadId', {'address': address});
+      final id = await _queryChannel.invokeMethod('getOrCreateThreadId', {
+        'address': address,
+      });
       // Depending on Kotlin result, it might be an int or a string that parses to int, or a Long in Kotlin which is int in Dart.
       if (id is int) return id;
       if (id is String) return int.tryParse(id);
@@ -66,7 +75,10 @@ class NativeSmsService {
 
   static Future<List<Map<String, String>>> searchContacts(String query) async {
     try {
-      final List<dynamic>? result = await _queryChannel.invokeMethod('searchContacts', {'query': query});
+      final List<dynamic>? result = await _queryChannel.invokeMethod(
+        'searchContacts',
+        {'query': query},
+      );
       if (result == null) return [];
       return result.map((e) => Map<String, String>.from(e as Map)).toList();
     } catch (_) {
@@ -88,6 +100,21 @@ class NativeSmsService {
       return result.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (e) {
       throw Exception('Error fetching threads: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchThreadsSince(
+    int timestamp, {
+    int limit = 1000,
+  }) async {
+    try {
+      final List<dynamic> result = await _queryChannel.invokeMethod(
+        'fetchThreadsSince',
+        {'timestamp': timestamp, 'limit': limit},
+      );
+      return result.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      throw Exception('Error fetching threads since: $e');
     }
   }
 
@@ -113,7 +140,9 @@ class NativeSmsService {
 
   static Future<List<Map<String, dynamic>>> getSimInfo() async {
     try {
-      final List<dynamic>? result = await _queryChannel.invokeMethod('getSimInfo');
+      final List<dynamic>? result = await _queryChannel.invokeMethod(
+        'getSimInfo',
+      );
       if (result == null) return [];
       return result.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (_) {
@@ -123,14 +152,18 @@ class NativeSmsService {
 
   // ── Send SMS ─────────────────────────────────────────────────────
 
-  static Future<bool> sendSms(String address, String body, {int? subscriptionId}) async {
+  static Future<int> sendSms(
+    String address,
+    String body, {
+    int? subscriptionId,
+  }) async {
     try {
-      return await _queryChannel.invokeMethod<bool>('sendSms', {
+      return await _queryChannel.invokeMethod<int>('sendSms', {
             'address': address,
             'body': body,
             'subscriptionId': subscriptionId,
           }) ??
-          false;
+          -1;
     } catch (e) {
       throw Exception('Error sending SMS: $e');
     }

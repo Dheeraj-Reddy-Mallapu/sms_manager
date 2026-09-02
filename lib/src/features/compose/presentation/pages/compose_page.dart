@@ -15,7 +15,7 @@ class ComposePage extends StatefulWidget {
 class _ComposePageState extends State<ComposePage> {
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
-  
+
   bool _isLoading = false;
   List<Map<String, String>> _searchResults = [];
   Timer? _debounce;
@@ -39,7 +39,7 @@ class _ComposePageState extends State<ComposePage> {
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    
+
     if (query.trim().isEmpty) {
       setState(() {
         _searchResults = [];
@@ -49,7 +49,7 @@ class _ComposePageState extends State<ComposePage> {
     }
 
     setState(() => _isLoading = true);
-    
+
     _debounce = Timer(const Duration(milliseconds: 300), () async {
       final results = await NativeSmsService.searchContacts(query.trim());
       if (mounted) {
@@ -61,7 +61,11 @@ class _ComposePageState extends State<ComposePage> {
     });
   }
 
-  Future<void> _selectContact(String name, String number, String photoUri) async {
+  Future<void> _selectContact(
+    String name,
+    String number,
+    String photoUri,
+  ) async {
     // If they typed a raw number and tapped "Send to", name might be empty
     final address = number;
     final threadId = await NativeSmsService.getOrCreateThreadId(address);
@@ -78,7 +82,7 @@ class _ComposePageState extends State<ComposePage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final query = _searchController.text.trim();
-    
+
     // Check if query looks like a phone number
     final isPhoneNumber = RegExp(r'^\+?[0-9\-\s\(\)]+$').hasMatch(query);
 
@@ -96,7 +100,9 @@ class _ComposePageState extends State<ComposePage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+              border: Border(
+                bottom: BorderSide(color: colorScheme.outlineVariant),
+              ),
             ),
             child: Row(
               children: [
@@ -126,14 +132,14 @@ class _ComposePageState extends State<ComposePage> {
                 IconButton(
                   icon: const Icon(Icons.dialpad),
                   onPressed: () {
-                    // Could open native contact picker, but not strictly needed 
+                    // Could open native contact picker, but not strictly needed
                     // since we search contacts natively.
                   },
                 ),
               ],
             ),
           ),
-          
+
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.all(16.0),
@@ -148,13 +154,16 @@ class _ComposePageState extends State<ComposePage> {
                   ListTile(
                     leading: CircleAvatar(
                       backgroundColor: colorScheme.primaryContainer,
-                      child: Icon(Icons.send, color: colorScheme.onPrimaryContainer),
+                      child: Icon(
+                        Icons.send,
+                        color: colorScheme.onPrimaryContainer,
+                      ),
                     ),
                     title: const Text('Send to'),
                     subtitle: Text(query),
                     onTap: () => _selectContact(query, query, ''),
                   ),
-                
+
                 // 2. Search Results
                 ..._searchResults.map((c) {
                   final name = c['name'] ?? '';
@@ -172,13 +181,14 @@ class _ComposePageState extends State<ComposePage> {
                     onTap: () => _selectContact(name, number, photoUri),
                   );
                 }),
-                
-                if (!_isLoading && query.isNotEmpty && !isPhoneNumber && _searchResults.isEmpty)
+
+                if (!_isLoading &&
+                    query.isNotEmpty &&
+                    !isPhoneNumber &&
+                    _searchResults.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(32.0),
-                    child: Center(
-                      child: Text('No contacts found.'),
-                    ),
+                    child: Center(child: Text('No contacts found.')),
                   ),
               ],
             ),

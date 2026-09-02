@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -58,6 +58,13 @@ CREATE TABLE messages (
   type      INTEGER NOT NULL,
   isStarred INTEGER NOT NULL DEFAULT 0,
   subscriptionId INTEGER NOT NULL DEFAULT -1
+)
+''');
+
+    await db.execute('''
+CREATE TABLE app_metadata (
+  key       TEXT PRIMARY KEY,
+  value     TEXT NOT NULL
 )
 ''');
   }
@@ -100,6 +107,60 @@ CREATE TABLE messages (
         );
       } catch (_) {}
     }
+    if (oldVersion < 5) {
+      try {
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS app_metadata (
+  key       TEXT PRIMARY KEY,
+  value     TEXT NOT NULL
+)
+''');
+      } catch (_) {}
+    }
+  }
+
+  // ── App Metadata ─────────────────────────────────────────────────────────
+
+  Future<void> setMetadata(String key, String value) async {
+    final db = await instance.database;
+    await db.insert('app_metadata', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<String?> getMetadata(String key) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'app_metadata',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    if (maps.isNotEmpty) {
+      return maps.first['value'] as String?;
+    }
+    return null;
+  }
+
+  Future<void> setFullSyncCompleted(bool completed) async {
+    await setMetadata('full_sync_completed', completed ? 'true' : 'false');
+  }
+
+  Future<bool> getFullSyncCompleted() async {
+    final val = await getMetadata('full_sync_completed');
+    return val == 'true';
+  }
+
+  Future<void> setLastSyncTimestamp(int timestamp) async {
+    await setMetadata('last_sync_timestamp', timestamp.toString());
+  }
+
+  Future<int> getLastSyncTimestamp() async {
+    final val = await getMetadata('last_sync_timestamp');
+    if (val != null) {
+      return int.tryParse(val) ?? 0;
+    }
+    return 0;
   }
 
   // ── Threads ──────────────────────────────────────────────────────────────

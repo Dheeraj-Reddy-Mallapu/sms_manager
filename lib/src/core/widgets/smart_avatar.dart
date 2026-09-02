@@ -25,7 +25,7 @@ class SmartAvatar extends StatefulWidget {
 class _SmartAvatarState extends State<SmartAvatar> {
   static const _queryChannel = MethodChannel('sms_manager/query');
   static final Map<String, Uint8List?> _photoCache = {};
-  
+
   Uint8List? _photoBytes;
   bool _isLoading = false;
 
@@ -43,21 +43,24 @@ class _SmartAvatarState extends State<SmartAvatar> {
     }
   }
 
-  String? get _photoUri => widget.overrideContactPhotoUri ?? widget.thread?.contactPhotoUri;
+  String? get _photoUri =>
+      widget.overrideContactPhotoUri ?? widget.thread?.contactPhotoUri;
   String get _displayName {
     final name = widget.overrideContactName ?? widget.thread?.contactName;
     if (name != null && name.isNotEmpty) return name;
-    final address = widget.overrideAddress ?? widget.thread?.address ?? 'Unknown';
+    final address =
+        widget.overrideAddress ?? widget.thread?.address ?? 'Unknown';
     if (address.isNotEmpty) return address;
     return 'Unknown';
   }
-  
-  String? _getPhotoUri(SmartAvatar widget) => widget.overrideContactPhotoUri ?? widget.thread?.contactPhotoUri;
+
+  String? _getPhotoUri(SmartAvatar widget) =>
+      widget.overrideContactPhotoUri ?? widget.thread?.contactPhotoUri;
 
   Future<void> _loadPhoto() async {
     final uri = _photoUri;
     if (uri == null || uri.isEmpty) return;
-    
+
     if (_photoCache.containsKey(uri)) {
       setState(() {
         _photoBytes = _photoCache[uri];
@@ -66,9 +69,12 @@ class _SmartAvatarState extends State<SmartAvatar> {
     }
 
     setState(() => _isLoading = true);
-    
+
     try {
-      final result = await _queryChannel.invokeMethod<Uint8List>('getContactPhoto', {'uri': uri});
+      final result = await _queryChannel.invokeMethod<Uint8List>(
+        'getContactPhoto',
+        {'uri': uri},
+      );
       if (mounted) {
         setState(() {
           _photoBytes = result;
@@ -88,27 +94,45 @@ class _SmartAvatarState extends State<SmartAvatar> {
   String? _getBrandLogo(String name) {
     final lower = name.toLowerCase();
     if (lower.contains('amazon')) return 'https://logo.clearbit.com/amazon.com';
-    if (lower.contains('flipkart')) return 'https://logo.clearbit.com/flipkart.com';
+    if (lower.contains('flipkart')) {
+      return 'https://logo.clearbit.com/flipkart.com';
+    }
     if (lower.contains('google')) return 'https://logo.clearbit.com/google.com';
-    if (lower.contains('netflix')) return 'https://logo.clearbit.com/netflix.com';
+    if (lower.contains('netflix')) {
+      return 'https://logo.clearbit.com/netflix.com';
+    }
     if (lower.contains('swiggy')) return 'https://logo.clearbit.com/swiggy.com';
     if (lower.contains('zomato')) return 'https://logo.clearbit.com/zomato.com';
     if (lower.contains('uber')) return 'https://logo.clearbit.com/uber.com';
     if (lower.contains('ola')) return 'https://logo.clearbit.com/olacabs.com';
     if (lower.contains('hdfc')) return 'https://logo.clearbit.com/hdfcbank.com';
     if (lower.contains('sbi')) return 'https://logo.clearbit.com/onlinesbi.sbi';
-    if (lower.contains('icici')) return 'https://logo.clearbit.com/icicibank.com';
+    if (lower.contains('icici')) {
+      return 'https://logo.clearbit.com/icicibank.com';
+    }
     if (lower.contains('apple')) return 'https://logo.clearbit.com/apple.com';
-    if (lower.contains('facebook') || lower.contains('fb')) return 'https://logo.clearbit.com/facebook.com';
-    if (lower.contains('instagram')) return 'https://logo.clearbit.com/instagram.com';
-    if (lower.contains('whatsapp')) return 'https://logo.clearbit.com/whatsapp.com';
-    if (lower.contains('twitter') || lower.contains(' x ')) return 'https://logo.clearbit.com/x.com';
+    if (lower.contains('facebook') || lower.contains('fb')) {
+      return 'https://logo.clearbit.com/facebook.com';
+    }
+    if (lower.contains('instagram')) {
+      return 'https://logo.clearbit.com/instagram.com';
+    }
+    if (lower.contains('whatsapp')) {
+      return 'https://logo.clearbit.com/whatsapp.com';
+    }
+    if (lower.contains('twitter') || lower.contains(' x ')) {
+      return 'https://logo.clearbit.com/x.com';
+    }
     if (lower.contains('myntra')) return 'https://logo.clearbit.com/myntra.com';
     if (lower.contains('paytm')) return 'https://logo.clearbit.com/paytm.com';
-    if (lower.contains('phonepe')) return 'https://logo.clearbit.com/phonepe.com';
+    if (lower.contains('phonepe')) {
+      return 'https://logo.clearbit.com/phonepe.com';
+    }
     if (lower.contains('jio')) return 'https://logo.clearbit.com/jio.com';
     if (lower.contains('airtel')) return 'https://logo.clearbit.com/airtel.in';
-    if (lower.contains('vi') || lower.contains('vodafone')) return 'https://logo.clearbit.com/myvi.in';
+    if (lower.contains('vi') || lower.contains('vodafone')) {
+      return 'https://logo.clearbit.com/myvi.in';
+    }
     return null;
   }
 
@@ -129,7 +153,9 @@ class _SmartAvatarState extends State<SmartAvatar> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final initial = _displayName.isNotEmpty ? _displayName[0].toUpperCase() : '?';
+    final initial = _displayName.isNotEmpty
+        ? _displayName[0].toUpperCase()
+        : '?';
     final avatarColor = _colorFromString(_displayName, colorScheme);
     final fallbackTextStyle = TextStyle(
       color: _onColor(avatarColor),
@@ -175,9 +201,12 @@ class _SmartAvatarState extends State<SmartAvatar> {
     return CircleAvatar(
       radius: widget.radius,
       backgroundColor: avatarColor,
-      child: _isLoading 
-        ? CircularProgressIndicator(color: _onColor(avatarColor), strokeWidth: 2)
-        : Text(initial, style: fallbackTextStyle),
+      child: _isLoading
+          ? CircularProgressIndicator(
+              color: _onColor(avatarColor),
+              strokeWidth: 2,
+            )
+          : Text(initial, style: fallbackTextStyle),
     );
   }
 }

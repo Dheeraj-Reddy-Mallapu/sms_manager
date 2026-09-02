@@ -27,10 +27,7 @@ final appRouter = GoRouter(
   initialLocation: '/',
   debugLogDiagnostics: false,
   routes: [
-    GoRoute(
-      path: '/',
-      builder: (context, state) => const SplashPage(),
-    ),
+    GoRoute(path: '/', builder: (context, state) => const SplashPage()),
 
     GoRoute(
       path: '/home',

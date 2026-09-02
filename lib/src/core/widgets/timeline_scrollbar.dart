@@ -117,109 +117,116 @@ class _TimelineScrollbarState extends State<TimelineScrollbar>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return LayoutBuilder(builder: (context, constraints) {
-      // Thumb position: fraction of (track height - thumb size)
-      const thumbHeight = 48.0;
-      const trackPadding = 8.0;
-      final trackH = constraints.maxHeight - trackPadding * 2 - thumbHeight;
-      final thumbTop = trackPadding + _fraction * trackH;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Thumb position: fraction of (track height - thumb size)
+        const thumbHeight = 48.0;
+        const trackPadding = 8.0;
+        final trackH = constraints.maxHeight - trackPadding * 2 - thumbHeight;
+        final thumbTop = trackPadding + _fraction * trackH;
 
-      final label = (_isDragging || _isScrolling)
-          ? widget.labelForFraction(_fraction)
-          : '';
+        final label = (_isDragging || _isScrolling)
+            ? widget.labelForFraction(_fraction)
+            : '';
 
-      return Stack(
-        children: [
-          widget.child,
+        return Stack(
+          children: [
+            widget.child,
 
-          // Scrollbar track + thumb (always visible, subtle)
-          Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onVerticalDragUpdate: (d) => _onDragUpdate(d, constraints),
-              onVerticalDragEnd: _onDragEnd,
-              onVerticalDragStart: (_) {
-                setState(() => _isDragging = true);
-                _fadeCtrl.forward();
-              },
-              child: SizedBox(
-                width: 24,
-                child: Stack(
-                  children: [
-                    // Track line
-                    Positioned(
-                      right: 10,
-                      top: trackPadding,
-                      bottom: trackPadding,
-                      child: Container(
-                        width: 2,
-                        decoration: BoxDecoration(
-                          color: colorScheme.outlineVariant.withAlpha(80),
-                          borderRadius: BorderRadius.circular(1),
-                        ),
-                      ),
-                    ),
-                    // Thumb
-                    Positioned(
-                      right: 6,
-                      top: thumbTop,
-                      child: AnimatedOpacity(
-                        opacity: (_isDragging || _isScrolling) ? 1.0 : 0.4,
-                        duration: const Duration(milliseconds: 200),
+            // Scrollbar track + thumb (always visible, subtle)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragUpdate: (d) => _onDragUpdate(d, constraints),
+                onVerticalDragEnd: _onDragEnd,
+                onVerticalDragStart: (_) {
+                  setState(() => _isDragging = true);
+                  _fadeCtrl.forward();
+                },
+                child: SizedBox(
+                  width: 24,
+                  child: Stack(
+                    children: [
+                      // Track line
+                      Positioned(
+                        right: 10,
+                        top: trackPadding,
+                        bottom: trackPadding,
                         child: Container(
-                          width: 10,
-                          height: thumbHeight,
+                          width: 2,
                           decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(5),
+                            color: colorScheme.outlineVariant.withAlpha(80),
+                            borderRadius: BorderRadius.circular(1),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Floating date label — shown while scrolling/dragging
-          if (label.isNotEmpty)
-            Positioned(
-              right: 28,
-              top: (thumbTop + thumbHeight / 2 - 18).clamp(0.0, constraints.maxHeight - 36),
-              child: FadeTransition(
-                opacity: _fadeAnim,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: colorScheme.inverseSurface,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(40),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                      // Thumb
+                      Positioned(
+                        right: 6,
+                        top: thumbTop,
+                        child: AnimatedOpacity(
+                          opacity: (_isDragging || _isScrolling) ? 1.0 : 0.4,
+                          duration: const Duration(milliseconds: 200),
+                          child: Container(
+                            width: 10,
+                            height: thumbHeight,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: colorScheme.onInverseSurface,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+
+            // Floating date label — shown while scrolling/dragging
+            if (label.isNotEmpty)
+              Positioned(
+                right: 28,
+                top: (thumbTop + thumbHeight / 2 - 18).clamp(
+                  0.0,
+                  constraints.maxHeight - 36,
+                ),
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.inverseSurface,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(40),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: colorScheme.onInverseSurface,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -235,7 +242,9 @@ String timelineLabel(int timestampMs) {
 
   if (diff == 0) return 'Today';
   if (diff == 1) return 'Yesterday';
-  if (diff < 7) return DateFormat('EEE').format(date);        // "Tue"
-  if (date.year == now.year) return DateFormat('MMM d').format(date); // "Aug 24"
-  return DateFormat('MMM d, yy').format(date);                // "Aug 24, 23"
+  if (diff < 7) return DateFormat('EEE').format(date); // "Tue"
+  if (date.year == now.year) {
+    return DateFormat('MMM d').format(date); // "Aug 24"
+  }
+  return DateFormat('MMM d, yy').format(date); // "Aug 24, 23"
 }

@@ -116,6 +116,87 @@ object SmsFetcher {
     }
 
     /**
+     * Delta sync: fetches thread summaries for threads that have new activity since a given timestamp.
+     * Uses DATE > timestamp to quickly find updated threads.
+     */
+    fun fetchThreadsSince(context: Context, timestamp: Long, limit: Int = 1000): List<Map<String, Any?>> {
+        val threadOrder = mutableListOf<Long>()
+        val threadData  = mutableMapOf<Long, MutableMap<String, Any?>>()
+
+        val smsCursor = context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            arrayOf(
+                Telephony.Sms._ID,
+                Telephony.Sms.THREAD_ID,
+                Telephony.Sms.ADDRESS,
+                Telephony.Sms.BODY,
+                Telephony.Sms.DATE,
+                Telephony.Sms.READ
+            ),
+            "${Telephony.Sms.DATE} > ?", arrayOf(timestamp.toString()),
+            "${Telephony.Sms.DATE} DESC"
+        )
+
+        smsCursor?.use { c ->
+            val idIdx       = c.getColumnIndexOrThrow(Telephony.Sms._ID)
+            val threadIdIdx = c.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)
+            val addressIdx  = c.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
+            val bodyIdx     = c.getColumnIndexOrThrow(Telephony.Sms.BODY)
+            val dateIdx     = c.getColumnIndexOrThrow(Telephony.Sms.DATE)
+            val readIdx     = c.getColumnIndexOrThrow(Telephony.Sms.READ)
+
+            while (c.moveToNext()) {
+                val tid = c.getLong(threadIdIdx)
+
+                if (tid !in threadData) {
+                    threadOrder.add(tid)
+                    threadData[tid] = mutableMapOf(
+                        "id"           to tid,
+                        "recipientIds" to "",
+                        "address"      to (c.getString(addressIdx) ?: ""),
+                        "snippet"      to (c.getString(bodyIdx)    ?: ""),
+                        "date"         to c.getLong(dateIdx),
+                        "read"         to c.getInt(readIdx),
+                        "messageCount" to 1,
+                        "hasUnread"    to (c.getInt(readIdx) == 0),
+                        "unreadCount"  to if (c.getInt(readIdx) == 0) 1 else 0
+                    )
+                } else {
+                    if (c.getInt(readIdx) == 0) {
+                        threadData[tid]!!["hasUnread"] = true
+                        threadData[tid]!!["unreadCount"] = (threadData[tid]!!["unreadCount"] as Int) + 1
+                    }
+                    threadData[tid]!!["messageCount"] = (threadData[tid]!!["messageCount"] as Int) + 1
+                }
+            }
+        } ?: Log.e(TAG, "SMS content resolver returned null for fetchThreadsSince")
+
+        // Finalize read status
+        threadOrder.forEach { tid ->
+            val data = threadData[tid]!!
+            data["read"] = if (data["hasUnread"] as Boolean) 0 else 1
+            data.remove("hasUnread")
+        }
+
+        // Batch contact lookup
+        val addresses = threadOrder
+            .mapNotNull { tid -> threadData[tid]!!["address"] as? String }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
+        val contactMap = batchLookupContacts(context, addresses)
+        
+        return threadOrder.map { tid ->
+            val data    = threadData[tid]!!
+            val address = data["address"] as? String ?: ""
+            val contact = contactMap[address]
+            data["contactName"]     = contact?.get("name")
+            data["contactPhotoUri"] = contact?.get("photoUri")
+            data
+        }.take(limit)
+    }
+
+    /**
      * Batch-resolves phone numbers → contact info using ContactsContract.
      * All lookups happen here in Kotlin — zero MethodChannel round trips per contact.
      */

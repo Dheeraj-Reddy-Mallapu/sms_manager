@@ -130,9 +130,10 @@ class ConversationLoaded extends ConversationState {
   final Set<int> selectedIds; // non-empty → multi-select mode
   final String searchQuery; // non-empty → search mode
   final Set<int> alreadyReadIds; // ids we've already sent markAsRead for
-  
+
   final List<Map<String, dynamic>> simInfoList; // List of active SIMs
-  final int? selectedSimId; // currently selected subscriptionId (null = system default)
+  final int?
+  selectedSimId; // currently selected subscriptionId (null = system default)
 
   const ConversationLoaded({
     required this.messages,
@@ -283,7 +284,11 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
       final simInfoList = await repository.getSimInfo();
       int? defaultSimId;
       if (simInfoList.isNotEmpty) {
-        defaultSimId = simInfoList.first['subscriptionId'] as int?;
+        final defaultSim = simInfoList.cast<Map<String, dynamic>>().firstWhere(
+          (sim) => sim['isDefault'] == true,
+          orElse: () => simInfoList.first,
+        );
+        defaultSimId = defaultSim['subscriptionId'] as int?;
       }
 
       if (!isClosed) {
@@ -349,24 +354,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     final current = state;
     if (current is! ConversationLoaded) return;
 
-    // Optimistic insert
-    final tempId = -DateTime.now().millisecondsSinceEpoch;
-    final optimistic = SmsMessage(
-      id: tempId,
-      threadId: event.threadId,
-      address: event.address,
-      body: event.body,
-      date: DateTime.now().millisecondsSinceEpoch,
-      read: true,
-      type: 2, // Sent
-      isOptimistic: true,
-    );
-    emit(
-      current.copyWith(
-        messages: [...current.messages, optimistic],
-        isSending: true,
-      ),
-    );
+    emit(current.copyWith(isSending: true));
 
     try {
       final success = await repository.sendSms(
@@ -377,26 +365,33 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
       );
 
       if (success) {
-        // Re-fetch to get the real message ID from Telephony provider
+        // Just reload from local DB since repository.sendSms did the optimistic insert.
+        // The background native broadcast will later trigger SystemMessagesChanged to update to Sent status.
         final fresh = await repository.getMessages(
           event.threadId,
           limit: _pageSize,
           offset: 0,
-          forceSync: true,
+          forceSync: false,
         );
         final freshDisplay = _toDisplayOrder(fresh);
         final merged = _mergeMessages(current.messages, freshDisplay);
-        
+
         if (!isClosed) {
           emit(current.copyWith(messages: merged, isSending: false));
         }
       } else {
-        // Mark optimistic as failed
-        final updated = current.messages.map((m) {
-          return m.id == tempId ? m.copyWith(type: 5) : m; // type 5 = Failed
-        }).toList();
+        // If native send completely failed before even queueing
+        // Just reload from DB (optimistic message type was set to 5 by repository)
+        final fresh = await repository.getMessages(
+          event.threadId,
+          limit: _pageSize,
+          offset: 0,
+          forceSync: false,
+        );
+        final freshDisplay = _toDisplayOrder(fresh);
+        final merged = _mergeMessages(current.messages, freshDisplay);
         if (!isClosed) {
-          emit(current.copyWith(messages: updated, isSending: false));
+          emit(current.copyWith(messages: merged, isSending: false));
         }
       }
     } catch (_) {
@@ -551,18 +546,20 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
 
   /// Merges a fresh page of newest messages with the currently loaded older messages
   /// so that we don't lose older messages if the user scrolled up.
-  List<SmsMessage> _mergeMessages(List<SmsMessage> currentList, List<SmsMessage> freshNewestList) {
+  List<SmsMessage> _mergeMessages(
+    List<SmsMessage> currentList,
+    List<SmsMessage> freshNewestList,
+  ) {
     final freshIds = freshNewestList.map((m) => m.id).toSet();
-    final olderKeep = currentList.where((m) => !freshIds.contains(m.id)).toList();
+    final olderKeep = currentList
+        .where((m) => !freshIds.contains(m.id))
+        .toList();
     return [...olderKeep, ...freshNewestList];
   }
 
   // ── Database System Changes ────────────────────────────────────────────
 
-  void _onSelectSim(
-    SelectSim event,
-    Emitter<ConversationState> emit,
-  ) {
+  void _onSelectSim(SelectSim event, Emitter<ConversationState> emit) {
     final current = state;
     if (current is ConversationLoaded) {
       emit(current.copyWith(selectedSimId: event.subscriptionId));
@@ -578,7 +575,8 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
 
     // Debounce rapid system changes
     final now = DateTime.now();
-    if (_lastSystemChange != null && now.difference(_lastSystemChange!).inMilliseconds < 500) {
+    if (_lastSystemChange != null &&
+        now.difference(_lastSystemChange!).inMilliseconds < 500) {
       return;
     }
     _lastSystemChange = now;
@@ -587,7 +585,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
       // Small delay to allow any local SQLite writes to settle, although NativeSmsService
       // systemSmsChanges actually fires from Android content observer.
       await Future.delayed(const Duration(milliseconds: 300));
-      
+
       // Fetch latest messages from Native to get external changes
       final fresh = await repository.getMessages(
         current.threadId,
@@ -596,9 +594,9 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
         forceSync: true,
       );
       final freshDisplay = _toDisplayOrder(fresh);
-      
+
       // We only merge the first page so we don't overwrite older loaded messages.
-      // If the user scrolled deep and an old message was deleted by another app, 
+      // If the user scrolled deep and an old message was deleted by another app,
       // they might still see it until they refresh, but that's a rare edge case.
       final merged = _mergeMessages(current.messages, freshDisplay);
 

@@ -5,7 +5,7 @@ class ComposeBar extends StatefulWidget {
   final String address;
   final bool isSending;
   final void Function(String body) onSend;
-  
+
   final List<Map<String, dynamic>> simInfoList;
   final int? selectedSimId;
   final void Function(int id)? onSimSelected;
@@ -139,10 +139,7 @@ class _ComposeBarState extends State<ComposeBar> {
                     // SMS character counter — always shown when typing
                     if (!isEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(
-                          right: 14,
-                          bottom: 6,
-                        ),
+                        padding: const EdgeInsets.only(right: 14, bottom: 6),
                         child: Align(
                           alignment: Alignment.centerRight,
                           child: Text(
@@ -169,7 +166,11 @@ class _ComposeBarState extends State<ComposeBar> {
 
             // Send button
             GestureDetector(
-              onLongPress: (widget.simInfoList.length > 1 && !isEmpty && !widget.isSending)
+              onTap: (isEmpty || widget.isSending) ? null : _send,
+              onLongPress:
+                  (widget.simInfoList.length > 1 &&
+                      !isEmpty &&
+                      !widget.isSending)
                   ? () => _showSimSwitcher(context)
                   : null,
               child: AnimatedContainer(
@@ -178,7 +179,9 @@ class _ComposeBarState extends State<ComposeBar> {
                   color: isEmpty
                       ? colorScheme.surfaceContainerHighest
                       : colorScheme.primary,
-                  borderRadius: BorderRadius.circular(24), // Pill shape to fit text if needed
+                  borderRadius: BorderRadius.circular(
+                    24,
+                  ), // Pill shape to fit text if needed
                 ),
                 padding: const EdgeInsets.all(12),
                 child: widget.isSending
@@ -204,15 +207,12 @@ class _ComposeBarState extends State<ComposeBar> {
                             ),
                             const SizedBox(width: 4),
                           ],
-                          InkWell(
-                            onTap: isEmpty ? null : _send,
-                            child: Icon(
-                              Icons.send_rounded,
-                              size: 20,
-                              color: isEmpty
-                                  ? colorScheme.onSurfaceVariant
-                                  : colorScheme.onPrimary,
-                            ),
+                          Icon(
+                            Icons.send_rounded,
+                            size: 20,
+                            color: isEmpty
+                                ? colorScheme.onSurfaceVariant
+                                : colorScheme.onPrimary,
                           ),
                         ],
                       ),
@@ -247,7 +247,9 @@ class _ComposeBarState extends State<ComposeBar> {
               return ListTile(
                 leading: Icon(
                   Icons.sim_card,
-                  color: isSelected ? Theme.of(context).colorScheme.primary : null,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
                 ),
                 title: Text(name),
                 subtitle: number.isNotEmpty ? Text(number) : null,

@@ -62,8 +62,20 @@ class SmsRepository {
   }
 
   /// Call this after returning cached threads to refresh in background.
-  Future<List<SmsThread>> backgroundRefresh({int limit = 500, int offset = 0}) async {
+  Future<List<SmsThread>> backgroundRefresh({
+    int limit = 500,
+    int offset = 0,
+  }) async {
     return await _fetchAndCacheThreads(limit: limit, offset: offset);
+  }
+
+  /// Smart Sync: Decides between full paginated sync and delta sync.
+  Future<void> smartSync({int maxLimit = 10000, int chunkSize = 100}) async {
+    // Just drain the stream so background tasks can await completion
+    await for (final _ in syncThreadsPaginated(
+      maxLimit: maxLimit,
+      chunkSize: chunkSize,
+    )) {}
   }
 
   /// Seamlessly fetch all threads in chunks so UI can update instantly with recent ones
@@ -71,16 +83,56 @@ class SmsRepository {
     int maxLimit = 10000,
     int chunkSize = 100,
   }) async* {
-    for (int offset = 0; offset < maxLimit; offset += chunkSize) {
-      final chunk = await _fetchAndCacheThreads(limit: chunkSize, offset: offset);
-      
-      // Emit the total cached threads so far
-      final allCached = await _db.getThreads(limit: maxLimit);
-      yield allCached;
-      
-      if (chunk.length < chunkSize) {
-        break; // Reached the end of available threads
+    final fullSyncCompleted = await _db.getFullSyncCompleted();
+
+    if (!fullSyncCompleted) {
+      // ── First Launch / Full Sync ──
+      try {
+        for (int offset = 0; offset < maxLimit; offset += chunkSize) {
+          final chunk = await _fetchAndCacheThreads(
+            limit: chunkSize,
+            offset: offset,
+          );
+
+          // Yield partial results so UI updates seamlessly
+          yield await _db.getThreads(limit: maxLimit);
+
+          if (chunk.length < chunkSize) break;
+        }
+
+        await _db.setFullSyncCompleted(true);
+
+        final cached = await _db.getThreads(limit: 1);
+        if (cached.isNotEmpty) {
+          await _db.setLastSyncTimestamp(cached.first.date);
+        }
+      } catch (e) {
+        // Leave full_sync_completed as false to retry later
       }
+    } else {
+      // ── Subsequent Launches / Delta Sync ──
+      final lastSync = await _db.getLastSyncTimestamp();
+      try {
+        final nativeData = await NativeSmsService.fetchThreadsSince(lastSync);
+        final threads = nativeData
+            .map((raw) => SmsThread.fromMap(raw))
+            .toList();
+
+        if (threads.isNotEmpty) {
+          await _db.upsertThreads(threads);
+
+          // Update last_sync_timestamp to the highest date we just fetched
+          int maxDate = lastSync;
+          for (var t in threads) {
+            if (t.date > maxDate) maxDate = t.date;
+          }
+          await _db.setLastSyncTimestamp(maxDate);
+        }
+      } catch (e) {
+        // Silently fail or log, will retry next time
+      }
+      // Yield the final updated data
+      yield await _db.getThreads(limit: maxLimit);
     }
   }
 
@@ -143,21 +195,39 @@ class SmsRepository {
 
   // ── Send / Mark / Delete ─────────────────────────────────────────
 
-  Future<bool> sendSms(int threadId, String address, String body, {int? subscriptionId}) async {
-    final success = await NativeSmsService.sendSms(address, body, subscriptionId: subscriptionId);
-    if (success) {
+  Future<bool> sendSms(
+    int threadId,
+    String address,
+    String body, {
+    int? subscriptionId,
+  }) async {
+    // 1. Perform native send which inserts to native provider (Outbox) and returns the real ID
+    int nativeId = -1;
+    try {
+      nativeId = await NativeSmsService.sendSms(
+        address,
+        body,
+        subscriptionId: subscriptionId,
+      );
+    } catch (_) {}
+
+    if (nativeId > 0) {
+      // 2. Optimistic UI: Insert instantly with the real ID and type = 4 (Outbox/Sending)
       final msg = SmsMessage(
-        id: DateTime.now().millisecondsSinceEpoch,
+        id: nativeId,
         threadId: threadId,
         address: address,
         body: body,
         date: DateTime.now().millisecondsSinceEpoch,
         read: true,
-        type: 2,
+        type: 4, // 4 = Outbox
+        subscriptionId: subscriptionId ?? -1,
       );
       await _db.insertMessages([msg]);
+      return true;
+    } else {
+      return false;
     }
-    return success;
   }
 
   Future<void> markThreadAsRead(int threadId) async {

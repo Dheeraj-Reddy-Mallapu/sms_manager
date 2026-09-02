@@ -142,7 +142,10 @@ class _ConversationPageState extends State<ConversationPage> {
           // Trigger read marking immediately for small conversations that don't scroll
           if (state.messages.any((m) => !m.read && !m.isOutgoing)) {
             _readDebounce?.cancel();
-            _readDebounce = Timer(const Duration(milliseconds: 400), _markVisibleRead);
+            _readDebounce = Timer(
+              const Duration(milliseconds: 400),
+              _markVisibleRead,
+            );
           }
 
           // Auto-scroll to bottom when a new message arrives and user is at bottom
@@ -195,10 +198,15 @@ class _ConversationPageState extends State<ConversationPage> {
                   _canReply
                       ? BlocBuilder<ConversationBloc, ConversationState>(
                           builder: (context, state) {
-                            final isSending = state is ConversationLoaded && state.isSending;
-                            final simInfoList = state is ConversationLoaded ? state.simInfoList : const <Map<String, dynamic>>[];
-                            final selectedSimId = state is ConversationLoaded ? state.selectedSimId : null;
-                            
+                            final isSending =
+                                state is ConversationLoaded && state.isSending;
+                            final simInfoList = state is ConversationLoaded
+                                ? state.simInfoList
+                                : const <Map<String, dynamic>>[];
+                            final selectedSimId = state is ConversationLoaded
+                                ? state.selectedSimId
+                                : null;
+
                             return ComposeBar(
                               address: widget.address ?? '',
                               isSending: isSending,
@@ -206,15 +214,17 @@ class _ConversationPageState extends State<ConversationPage> {
                               selectedSimId: selectedSimId,
                               onSend: (body) {
                                 context.read<ConversationBloc>().add(
-                                      SendMessage(
-                                        threadId: widget.threadId,
-                                        address: widget.address ?? '',
-                                        body: body,
-                                      ),
-                                    );
+                                  SendMessage(
+                                    threadId: widget.threadId,
+                                    address: widget.address ?? '',
+                                    body: body,
+                                  ),
+                                );
                               },
                               onSimSelected: (id) {
-                                context.read<ConversationBloc>().add(SelectSim(id));
+                                context.read<ConversationBloc>().add(
+                                  SelectSim(id),
+                                );
                               },
                             );
                           },
@@ -238,7 +248,6 @@ class _ConversationPageState extends State<ConversationPage> {
       },
     );
   }
-
 
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
@@ -313,13 +322,15 @@ class _ConversationPageState extends State<ConversationPage> {
         PopupMenuButton<String>(
           onSelected: _onMenuAction,
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'delete', child: Text('Delete conversation')),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Text('Delete conversation'),
+            ),
           ],
         ),
       ],
     );
   }
-
 
   AppBar _buildSearchAppBar(BuildContext context, ColorScheme colorScheme) {
     return AppBar(
@@ -456,9 +467,12 @@ class _ConversationPageState extends State<ConversationPage> {
       controller: _scrollController,
       labelForFraction: (fraction) {
         if (messages.isEmpty) return '';
-        // Conversation is reversed: bottom is newest (index length-1). 
+        // Conversation is reversed: bottom is newest (index length-1).
         // Fraction 0.0 is top (oldest), 1.0 is bottom (newest).
-        final idx = (fraction * messages.length).floor().clamp(0, messages.length - 1);
+        final idx = (fraction * messages.length).floor().clamp(
+          0,
+          messages.length - 1,
+        );
         return timelineLabel(messages[idx].date);
       },
       child: ListView.builder(
@@ -466,86 +480,87 @@ class _ConversationPageState extends State<ConversationPage> {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
         itemCount: messages.length + (state.isLoadingMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        // Spinner at top while loading older messages
-        if (state.isLoadingMore && index == 0) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+        itemBuilder: (context, index) {
+          // Spinner at top while loading older messages
+          if (state.isLoadingMore && index == 0) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
-            ),
-          );
-        }
-
-        final msgIndex = state.isLoadingMore ? index - 1 : index;
-        final message = messages[msgIndex];
-
-        // Determine grouping position
-        final prev = msgIndex > 0 ? messages[msgIndex - 1] : null;
-        final next = msgIndex < messages.length - 1
-            ? messages[msgIndex + 1]
-            : null;
-
-        final sameAsPrev =
-            prev != null &&
-            prev.isOutgoing == message.isOutgoing &&
-            message.date - prev.date < 60000;
-        final sameAsNext =
-            next != null &&
-            next.isOutgoing == message.isOutgoing &&
-            next.date - message.date < 60000;
-
-        BubblePosition pos;
-        if (!sameAsPrev && !sameAsNext) {
-          pos = BubblePosition.solo;
-        } else if (!sameAsPrev && sameAsNext) {
-          pos = BubblePosition.first;
-        } else if (sameAsPrev && sameAsNext) {
-          pos = BubblePosition.middle;
-        } else {
-          pos = BubblePosition.last;
-        }
-
-        // Date separator when day changes
-        final showDate =
-            prev == null ||
-            !_sameDay(
-              DateTime.fromMillisecondsSinceEpoch(prev.date),
-              DateTime.fromMillisecondsSinceEpoch(message.date),
             );
+          }
 
-        // Unread separator
-        final showUnreadSep =
-            firstUnreadIdx != null && msgIndex == firstUnreadIdx;
+          final msgIndex = state.isLoadingMore ? index - 1 : index;
+          final message = messages[msgIndex];
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showDate)
-              DateSeparator(
-                date: DateTime.fromMillisecondsSinceEpoch(message.date),
+          // Determine grouping position
+          final prev = msgIndex > 0 ? messages[msgIndex - 1] : null;
+          final next = msgIndex < messages.length - 1
+              ? messages[msgIndex + 1]
+              : null;
+
+          final sameAsPrev =
+              prev != null &&
+              prev.isOutgoing == message.isOutgoing &&
+              message.date - prev.date < 60000;
+          final sameAsNext =
+              next != null &&
+              next.isOutgoing == message.isOutgoing &&
+              next.date - message.date < 60000;
+
+          BubblePosition pos;
+          if (!sameAsPrev && !sameAsNext) {
+            pos = BubblePosition.solo;
+          } else if (!sameAsPrev && sameAsNext) {
+            pos = BubblePosition.first;
+          } else if (sameAsPrev && sameAsNext) {
+            pos = BubblePosition.middle;
+          } else {
+            pos = BubblePosition.last;
+          }
+
+          // Date separator when day changes
+          final showDate =
+              prev == null ||
+              !_sameDay(
+                DateTime.fromMillisecondsSinceEpoch(prev.date),
+                DateTime.fromMillisecondsSinceEpoch(message.date),
+              );
+
+          // Unread separator
+          final showUnreadSep =
+              firstUnreadIdx != null && msgIndex == firstUnreadIdx;
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showDate)
+                DateSeparator(
+                  date: DateTime.fromMillisecondsSinceEpoch(message.date),
+                ),
+              if (showUnreadSep) const UnreadSeparator(),
+              MessageBubble(
+                message: message,
+                position: pos,
+                isSelected: state.selectedIds.contains(message.id),
+                searchQuery: state.searchQuery,
+                onShowMenu: (msg) => _showContextMenu(context, msg),
+                onTap: state.selectedIds.isNotEmpty
+                    ? (msg) => context.read<ConversationBloc>().add(
+                        SelectMessage(msg.id),
+                      )
+                    : null,
               ),
-            if (showUnreadSep) const UnreadSeparator(),
-            MessageBubble(
-              message: message,
-              position: pos,
-              isSelected: state.selectedIds.contains(message.id),
-              searchQuery: state.searchQuery,
-              onShowMenu: (msg) => _showContextMenu(context, msg),
-              onTap: state.selectedIds.isNotEmpty
-                  ? (msg) => context.read<ConversationBloc>().add(
-                      SelectMessage(msg.id),
-                    )
-                  : null,
-            ),
-          ],
-        );
-      },
-    ));
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _showContextMenu(BuildContext context, SmsMessage message) {

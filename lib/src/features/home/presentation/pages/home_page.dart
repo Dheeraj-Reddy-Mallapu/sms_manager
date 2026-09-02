@@ -22,14 +22,13 @@ class _HomePageState extends State<HomePage> {
     _scrollController.dispose();
     super.dispose();
   }
+
   @override
   void initState() {
     super.initState();
     // Load from cache first (fast), then background-refresh from native
     context.read<HomeBloc>().add(const LoadThreads(forceSync: false));
   }
-
-
 
   /// Returns a time-aware greeting
   String _greeting() {
@@ -110,9 +109,10 @@ class _HomePageState extends State<HomePage> {
       controller: _scrollController,
       labelForFraction: (fraction) {
         if (filteredThreads.isEmpty) return '';
-        final idx = (fraction * filteredThreads.length)
-            .floor()
-            .clamp(0, filteredThreads.length - 1);
+        final idx = (fraction * filteredThreads.length).floor().clamp(
+          0,
+          filteredThreads.length - 1,
+        );
         return timelineLabel(filteredThreads[idx].date);
       },
       child: CustomScrollView(
@@ -156,9 +156,7 @@ class _HomePageState extends State<HomePage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        unreadCount > 0
-                            ? '$unreadCount unread'
-                            : 'All read',
+                        unreadCount > 0 ? '$unreadCount unread' : 'All read',
                         style: TextStyle(
                           color: colorScheme.onSurfaceVariant,
                           fontSize: 11,
@@ -397,13 +395,18 @@ class _HomePageState extends State<HomePage> {
                       if (isUnread) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: colorScheme.primary,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            thread.unreadCount > 99 ? '99+' : thread.unreadCount.toString(),
+                            thread.unreadCount > 99
+                                ? '99+'
+                                : thread.unreadCount.toString(),
                             style: TextStyle(
                               color: colorScheme.onPrimary,
                               fontSize: 10,
@@ -422,8 +425,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
-
 
   String _formatDate(int timestampMs) {
     final date = DateTime.fromMillisecondsSinceEpoch(timestampMs);
@@ -477,7 +478,9 @@ class _HomePageState extends State<HomePage> {
                     applicationVersion: '1.0.0',
                     applicationIcon: const Icon(Icons.message, size: 48),
                     children: [
-                      const Text('A smart SMS manager with local AI categorization.')
+                      const Text(
+                        'A smart SMS manager with local AI categorization.',
+                      ),
                     ],
                   );
                 },
@@ -489,8 +492,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _showContactSheet(BuildContext context, SmsThread thread, ColorScheme colorScheme) {
-    final isContact = thread.contactName != null && thread.contactName!.isNotEmpty;
+  void _showContactSheet(
+    BuildContext context,
+    SmsThread thread,
+    ColorScheme colorScheme,
+  ) {
+    final isContact =
+        thread.contactName != null && thread.contactName!.isNotEmpty;
     final displayName = isContact ? thread.contactName! : thread.address;
     final address = thread.address;
 
@@ -518,9 +526,8 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 4),
                 Text(
                   address,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -543,12 +550,17 @@ class _HomePageState extends State<HomePage> {
                     label: 'Message',
                     onTap: () {
                       Navigator.pop(context);
-                      context.push('/home/conversation/${thread.id}', extra: thread);
+                      context.push(
+                        '/home/conversation/${thread.id}',
+                        extra: thread,
+                      );
                     },
                   ),
                   _actionButton(
                     context: context,
-                    icon: isContact ? Icons.person_outline : Icons.person_add_alt_1_outlined,
+                    icon: isContact
+                        ? Icons.person_outline
+                        : Icons.person_add_alt_1_outlined,
                     label: isContact ? 'View' : 'Add',
                     onTap: () {
                       Navigator.pop(context);
@@ -596,4 +608,3 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-

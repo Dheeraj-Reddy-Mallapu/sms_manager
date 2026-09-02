@@ -96,4 +96,3 @@ class SmsMessage extends Equatable {
     isOptimistic,
   ];
 }
-

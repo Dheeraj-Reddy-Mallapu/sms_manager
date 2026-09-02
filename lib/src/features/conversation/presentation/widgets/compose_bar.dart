@@ -9,12 +9,14 @@ class ComposeBar extends StatefulWidget {
   final List<Map<String, dynamic>> simInfoList;
   final int? selectedSimId;
   final void Function(int id)? onSimSelected;
+  final String? initialBody;
 
   const ComposeBar({
     super.key,
     required this.address,
     required this.onSend,
     this.isSending = false,
+    this.initialBody,
     this.simInfoList = const [],
     this.selectedSimId,
     this.onSimSelected,
@@ -37,11 +39,14 @@ class _ComposeBarState extends State<ComposeBar> {
   @override
   void initState() {
     super.initState();
-    // Restore draft if exists
+    // Restore draft if exists, or use initialBody
     final savedDraft = _drafts[widget.address] ?? '';
     if (savedDraft.isNotEmpty) {
       _controller.text = savedDraft;
       _charCount = savedDraft.length;
+    } else if (widget.initialBody != null && widget.initialBody!.isNotEmpty) {
+      _controller.text = widget.initialBody!;
+      _charCount = widget.initialBody!.length;
     }
 
     _controller.addListener(() {

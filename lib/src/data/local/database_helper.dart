@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -57,7 +57,8 @@ CREATE TABLE messages (
   read      INTEGER NOT NULL,
   type      INTEGER NOT NULL,
   isStarred INTEGER NOT NULL DEFAULT 0,
-  subscriptionId INTEGER NOT NULL DEFAULT -1
+  subscriptionId INTEGER NOT NULL DEFAULT -1,
+  status    INTEGER NOT NULL DEFAULT -1
 )
 ''');
 
@@ -115,6 +116,13 @@ CREATE TABLE IF NOT EXISTS app_metadata (
   value     TEXT NOT NULL
 )
 ''');
+      } catch (_) {}
+    }
+    if (oldVersion < 6) {
+      try {
+        await db.execute(
+          'ALTER TABLE messages ADD COLUMN status INTEGER NOT NULL DEFAULT -1',
+        );
       } catch (_) {}
     }
   }

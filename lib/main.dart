@@ -5,10 +5,12 @@ import 'package:material_ui/material_ui.dart' hide GlobalMaterialLocalizations;
 import 'package:sms_manager/src/core/di/injection_container.dart';
 import 'package:sms_manager/src/core/routing/app_router.dart';
 import 'package:sms_manager/src/features/home/presentation/bloc/home_bloc.dart';
+import 'package:sms_manager/src/services/intent_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   setupDependencyInjection();
+  IntentService.initialize();
   runApp(const SmsManagerApp());
 }
 

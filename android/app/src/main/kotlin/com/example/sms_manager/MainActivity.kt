@@ -30,6 +30,68 @@ class MainActivity : FlutterActivity() {
     // after the user responds to the system dialog (in onActivityResult).
     private var pendingRoleResult: MethodChannel.Result? = null
 
+    // For deep linking & share intents
+    private var intentSink: EventChannel.EventSink? = null
+    private var pendingIntentData: Map<String, String>? = null
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent) {
+        val action = intent.action
+        if (action == Intent.ACTION_SENDTO || action == Intent.ACTION_SEND || action == Intent.ACTION_VIEW) {
+            var address = ""
+            var body = ""
+
+            if (action == Intent.ACTION_SEND) {
+                body = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+            } else {
+                val uri = intent.data
+                if (uri != null) {
+                    val ssp = uri.schemeSpecificPart ?: ""
+                    val queryStartIndex = ssp.indexOf("?")
+                    address = if (queryStartIndex != -1) {
+                        ssp.substring(0, queryStartIndex)
+                    } else {
+                        ssp
+                    }
+                    
+                    // Sometimes the body is in the URI query
+                    val uriBody = uri.getQueryParameter("body")
+                    if (!uriBody.isNullOrEmpty()) {
+                        body = uriBody
+                    }
+                }
+                if (body.isEmpty()) {
+                    body = intent.getStringExtra("sms_body") 
+                        ?: intent.getStringExtra(Intent.EXTRA_TEXT) 
+                        ?: ""
+                }
+            }
+            
+            // Cleanup address
+            address = address.replace("smsto:", "", ignoreCase = true)
+                .replace("sms:", "", ignoreCase = true)
+
+            if (address.isNotEmpty() || body.isNotEmpty()) {
+                val data = mapOf("address" to address, "body" to body)
+                if (intentSink != null) {
+                    intentSink?.success(data)
+                } else {
+                    pendingIntentData = data
+                }
+            }
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -51,6 +113,21 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // ── Incoming Intent EventChannel (Deep Linking) ───────────────────────
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "sms_manager/intent")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    intentSink = events
+                    pendingIntentData?.let {
+                        events?.success(it)
+                        pendingIntentData = null
+                    }
+                }
+                override fun onCancel(arguments: Any?) {
+                    intentSink = null
+                }
+            })
 
         // ── SMS Query Channel ─────────────────────────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, QUERY_CHANNEL)
@@ -120,70 +197,7 @@ class MainActivity : FlutterActivity() {
                         }
                         Thread {
                             try {
-                                val smsManager = if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        getSystemService(android.telephony.SmsManager::class.java).createForSubscriptionId(subscriptionId)
-                                    } else {
-                                        @Suppress("DEPRECATION")
-                                        android.telephony.SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
-                                    }
-                                } else {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        getSystemService(android.telephony.SmsManager::class.java)
-                                    } else {
-                                        @Suppress("DEPRECATION")
-                                        android.telephony.SmsManager.getDefault()
-                                    }
-                                }
-
-                                val values = android.content.ContentValues().apply {
-                                    put(Telephony.Sms.ADDRESS, address)
-                                    put(Telephony.Sms.BODY,    body)
-                                    put(Telephony.Sms.DATE,    System.currentTimeMillis())
-                                    put(Telephony.Sms.READ,    1)
-                                    put(Telephony.Sms.TYPE,    Telephony.Sms.MESSAGE_TYPE_OUTBOX) // Insert as OUTBOX initially!
-                                    if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                                        put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
-                                    }
-                                }
-                                val uri = contentResolver.insert(Telephony.Sms.Outbox.CONTENT_URI, values)
-
-                                val intent = android.content.Intent(this@MainActivity, SmsSentReceiver::class.java)
-                                intent.action = "com.example.sms_manager.SMS_SENT"
-                                intent.putExtra("message_uri", uri?.toString() ?: "")
-                                // Use a unique request code (msgId) to prevent PendingIntents from overwriting each other
-                                val requestCode = uri?.lastPathSegment?.toIntOrNull() ?: System.currentTimeMillis().toInt()
-                                val sentIntent = android.app.PendingIntent.getBroadcast(
-                                    this@MainActivity,
-                                    requestCode,
-                                    intent,
-                                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
-                                )
-
-                                val deliveryIntentObj = android.content.Intent(this@MainActivity, SmsDeliveredReceiver::class.java)
-                                deliveryIntentObj.action = "com.example.sms_manager.SMS_DELIVERED"
-                                deliveryIntentObj.putExtra("message_uri", uri?.toString() ?: "")
-                                val deliveryIntent = android.app.PendingIntent.getBroadcast(
-                                    this@MainActivity,
-                                    requestCode,
-                                    deliveryIntentObj,
-                                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
-                                )
-
-                                val parts = smsManager.divideMessage(body)
-                                if (parts.size == 1) {
-                                    smsManager.sendTextMessage(address, null, body, sentIntent, deliveryIntent)
-                                } else {
-                                    val sentIntents = ArrayList<android.app.PendingIntent>()
-                                    val deliveryIntents = ArrayList<android.app.PendingIntent>()
-                                    for (i in parts.indices) {
-                                        sentIntents.add(sentIntent)
-                                        deliveryIntents.add(deliveryIntent)
-                                    }
-                                    smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, deliveryIntents)
-                                }
-                                
-                                val nativeId = uri?.lastPathSegment?.toIntOrNull() ?: -1
+                                val nativeId = SmsSender.sendSms(this@MainActivity, address, body, subscriptionId)
                                 runOnUiThread { result.success(nativeId) }
                             } catch (e: Exception) {
                                 runOnUiThread { result.error("SEND_ERROR", e.message, null) }

@@ -6,7 +6,9 @@ import 'package:sms_manager/src/services/native_sms_service.dart';
 import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
 
 class ComposePage extends StatefulWidget {
-  const ComposePage({super.key});
+  final String? initialBody;
+  
+  const ComposePage({super.key, this.initialBody});
 
   @override
   State<ComposePage> createState() => _ComposePageState();
@@ -70,7 +72,10 @@ class _ComposePageState extends State<ComposePage> {
     final address = number;
     final threadId = await NativeSmsService.getOrCreateThreadId(address);
     if (threadId != null && mounted) {
-      context.pushReplacement('/home/conversation/$threadId', extra: null);
+      context.pushReplacement(
+        '/home/conversation/$threadId',
+        extra: {'thread': null, 'initialBody': widget.initialBody},
+      );
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to create conversation.')),

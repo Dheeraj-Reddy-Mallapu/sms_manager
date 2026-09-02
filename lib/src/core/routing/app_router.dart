@@ -37,13 +37,35 @@ final appRouter = GoRouter(
           path: 'conversation/:threadId',
           builder: (context, state) {
             final threadId = int.parse(state.pathParameters['threadId']!);
-            final thread = state.extra as SmsThread?;
-            return _conversationRoute(threadId, thread);
+            SmsThread? thread;
+            String? initialBody;
+            
+            if (state.extra is SmsThread) {
+              thread = state.extra as SmsThread;
+            } else if (state.extra is Map<String, dynamic>) {
+              final map = state.extra as Map<String, dynamic>;
+              thread = map['thread'] as SmsThread?;
+              initialBody = map['initialBody'] as String?;
+            }
+            
+            return BlocProvider<ConversationBloc>(
+              create: (_) => sl<ConversationBloc>(),
+              child: ConversationPage(
+                threadId: threadId,
+                address: thread?.address,
+                contactName: thread?.contactName,
+                contactPhotoUri: thread?.contactPhotoUri,
+                initialBody: initialBody,
+              ),
+            );
           },
         ),
         GoRoute(
           path: 'compose',
-          builder: (context, state) => const ComposePage(),
+          builder: (context, state) {
+            final initialBody = state.extra as String?;
+            return ComposePage(initialBody: initialBody);
+          },
         ),
       ],
     ),

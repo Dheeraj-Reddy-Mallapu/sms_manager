@@ -21,6 +21,7 @@ class ConversationPage extends StatefulWidget {
   final String? address;
   final String? contactName;
   final String? contactPhotoUri;
+  final String? initialBody;
 
   const ConversationPage({
     super.key,
@@ -28,6 +29,7 @@ class ConversationPage extends StatefulWidget {
     this.address,
     this.contactName,
     this.contactPhotoUri,
+    this.initialBody,
   });
 
   @override
@@ -215,6 +217,7 @@ class _ConversationPageState extends State<ConversationPage> {
                               isSending: isSending,
                               simInfoList: simInfoList,
                               selectedSimId: selectedSimId,
+                              initialBody: widget.initialBody,
                               onSend: (body) {
                                 context.read<ConversationBloc>().add(
                                   SendMessage(

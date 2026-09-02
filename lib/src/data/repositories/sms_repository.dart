@@ -13,6 +13,10 @@ class SmsRepository {
   Stream<Map<String, dynamic>> get incomingSmsStream =>
       NativeSmsService.incomingSmsStream;
 
+  // ── Database System Changes ──────────────────────────────────────
+  // Triggered via ContentObserver whenever ANY app modifies the SMS DB.
+  Stream<void> get systemSmsChanges => NativeSmsService.systemSmsChanges;
+
   // ── Threads ──────────────────────────────────────────────────────
 
   /// Returns cached threads instantly, then refreshes from native in background.
@@ -28,11 +32,11 @@ class SmsRepository {
     }
 
     final cached = await _db.getThreads(limit: limit, offset: offset);
-    if (cached.isEmpty) {
-      // First open — must wait
+    if (cached.isEmpty && forceSync) {
+      // First open and we want to wait
       return await _fetchAndCacheThreads(limit: limit, offset: offset);
     }
-    // Return cached instantly; caller can trigger background refresh separately
+    // Return cached instantly (might be empty); caller should trigger paginated sync separately
     return cached;
   }
 
@@ -58,8 +62,32 @@ class SmsRepository {
   }
 
   /// Call this after returning cached threads to refresh in background.
-  Future<List<SmsThread>> backgroundRefresh({int limit = 500}) async {
-    return await _fetchAndCacheThreads(limit: limit);
+  Future<List<SmsThread>> backgroundRefresh({int limit = 500, int offset = 0}) async {
+    return await _fetchAndCacheThreads(limit: limit, offset: offset);
+  }
+
+  /// Seamlessly fetch all threads in chunks so UI can update instantly with recent ones
+  Stream<List<SmsThread>> syncThreadsPaginated({
+    int maxLimit = 10000,
+    int chunkSize = 100,
+  }) async* {
+    for (int offset = 0; offset < maxLimit; offset += chunkSize) {
+      final chunk = await _fetchAndCacheThreads(limit: chunkSize, offset: offset);
+      
+      // Emit the total cached threads so far
+      final allCached = await _db.getThreads(limit: maxLimit);
+      yield allCached;
+      
+      if (chunk.length < chunkSize) {
+        break; // Reached the end of available threads
+      }
+    }
+  }
+
+  // ── SIM Info ─────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getSimInfo() async {
+    return await NativeSmsService.getSimInfo();
   }
 
   // ── Messages ─────────────────────────────────────────────────────
@@ -115,8 +143,8 @@ class SmsRepository {
 
   // ── Send / Mark / Delete ─────────────────────────────────────────
 
-  Future<bool> sendSms(int threadId, String address, String body) async {
-    final success = await NativeSmsService.sendSms(address, body);
+  Future<bool> sendSms(int threadId, String address, String body, {int? subscriptionId}) async {
+    final success = await NativeSmsService.sendSms(address, body, subscriptionId: subscriptionId);
     if (success) {
       final msg = SmsMessage(
         id: DateTime.now().millisecondsSinceEpoch,

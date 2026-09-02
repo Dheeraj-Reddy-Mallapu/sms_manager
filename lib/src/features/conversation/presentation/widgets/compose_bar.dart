@@ -5,12 +5,19 @@ class ComposeBar extends StatefulWidget {
   final String address;
   final bool isSending;
   final void Function(String body) onSend;
+  
+  final List<Map<String, dynamic>> simInfoList;
+  final int? selectedSimId;
+  final void Function(int id)? onSimSelected;
 
   const ComposeBar({
     super.key,
     required this.address,
     required this.onSend,
     this.isSending = false,
+    this.simInfoList = const [],
+    this.selectedSimId,
+    this.onSimSelected,
   });
 
   @override
@@ -18,6 +25,8 @@ class ComposeBar extends StatefulWidget {
 }
 
 class _ComposeBarState extends State<ComposeBar> {
+  static final Map<String, String> _drafts = {};
+
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   int _charCount = 0;
@@ -28,8 +37,17 @@ class _ComposeBarState extends State<ComposeBar> {
   @override
   void initState() {
     super.initState();
+    // Restore draft if exists
+    final savedDraft = _drafts[widget.address] ?? '';
+    if (savedDraft.isNotEmpty) {
+      _controller.text = savedDraft;
+      _charCount = savedDraft.length;
+    }
+
     _controller.addListener(() {
-      setState(() => _charCount = _controller.text.length);
+      final text = _controller.text;
+      _drafts[widget.address] = text;
+      setState(() => _charCount = text.length);
     });
   }
 
@@ -45,6 +63,7 @@ class _ComposeBarState extends State<ComposeBar> {
     if (text.isEmpty || widget.isSending) return;
     HapticFeedback.lightImpact();
     widget.onSend(text);
+    _drafts.remove(widget.address);
     _controller.clear();
     setState(() => _charCount = 0);
   }
@@ -149,39 +168,99 @@ class _ComposeBarState extends State<ComposeBar> {
             const SizedBox(width: 8),
 
             // Send button
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              decoration: BoxDecoration(
-                color: isEmpty
-                    ? colorScheme.surfaceContainerHighest
-                    : colorScheme.primary,
-                shape: BoxShape.circle,
-              ),
-              child: widget.isSending
-                  ? Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: SizedBox(
+            GestureDetector(
+              onLongPress: (widget.simInfoList.length > 1 && !isEmpty && !widget.isSending)
+                  ? () => _showSimSwitcher(context)
+                  : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                decoration: BoxDecoration(
+                  color: isEmpty
+                      ? colorScheme.surfaceContainerHighest
+                      : colorScheme.primary,
+                  borderRadius: BorderRadius.circular(24), // Pill shape to fit text if needed
+                ),
+                padding: const EdgeInsets.all(12),
+                child: widget.isSending
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: colorScheme.onPrimary,
                         ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.simInfoList.length > 1 && !isEmpty) ...[
+                            Text(
+                              _getSimLabel(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          InkWell(
+                            onTap: isEmpty ? null : _send,
+                            child: Icon(
+                              Icons.send_rounded,
+                              size: 20,
+                              color: isEmpty
+                                  ? colorScheme.onSurfaceVariant
+                                  : colorScheme.onPrimary,
+                            ),
+                          ),
+                        ],
                       ),
-                    )
-                  : IconButton(
-                      onPressed: isEmpty ? null : _send,
-                      icon: Icon(
-                        Icons.send_rounded,
-                        color: isEmpty
-                            ? colorScheme.onSurfaceVariant
-                            : colorScheme.onPrimary,
-                      ),
-                    ),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  String _getSimLabel() {
+    if (widget.selectedSimId == null) return 'SIM 1'; // fallback
+    final sim = widget.simInfoList.firstWhere(
+      (s) => s['subscriptionId'] == widget.selectedSimId,
+      orElse: () => widget.simInfoList.first,
+    );
+    return 'SIM ${(sim['simSlotIndex'] as int) + 1}';
+  }
+
+  void _showSimSwitcher(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: widget.simInfoList.map((sim) {
+              final isSelected = sim['subscriptionId'] == widget.selectedSimId;
+              final name = sim['displayName'] as String;
+              final number = sim['number'] as String;
+              return ListTile(
+                leading: Icon(
+                  Icons.sim_card,
+                  color: isSelected ? Theme.of(context).colorScheme.primary : null,
+                ),
+                title: Text(name),
+                subtitle: number.isNotEmpty ? Text(number) : null,
+                trailing: isSelected ? const Icon(Icons.check) : null,
+                onTap: () {
+                  widget.onSimSelected?.call(sim['subscriptionId'] as int);
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 }

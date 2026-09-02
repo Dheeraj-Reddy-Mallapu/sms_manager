@@ -29,18 +29,7 @@ class _HomePageState extends State<HomePage> {
     context.read<HomeBloc>().add(const LoadThreads(forceSync: false));
   }
 
-  Future<void> _onRefresh() async {
-    if (!mounted) return;
-    final bloc = context.read<HomeBloc>();
-    bloc.add(const LoadThreads(forceSync: true));
-    // Wait until background refresh completes
-    await Future.doWhile(() async {
-      await Future.delayed(const Duration(milliseconds: 200));
-      if (!mounted) return false;
-      final s = bloc.state;
-      return s is HomeLoading || (s is HomeLoaded && s.isRefreshing);
-    });
-  }
+
 
   /// Returns a time-aware greeting
   String _greeting() {
@@ -91,15 +80,13 @@ class _HomePageState extends State<HomePage> {
                 ),
               );
             } else if (state is HomeLoaded) {
-              return RefreshIndicator(
-                onRefresh: _onRefresh,
-                child: _buildHomeContent(context, state, colorScheme),
-              );
+              return _buildHomeContent(context, state, colorScheme);
             }
             return const SizedBox.shrink();
           },
         ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.go('/home/compose'),
         backgroundColor: colorScheme.primaryContainer,
@@ -131,61 +118,54 @@ class _HomePageState extends State<HomePage> {
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          // App bar row
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
-            sliver: SliverToBoxAdapter(
-              child: Row(
+          // Persistent App Bar (OneUI style)
+          SliverAppBar(
+            pinned: true,
+            floating: false,
+            expandedHeight: 120,
+            backgroundColor: colorScheme.surface,
+            surfaceTintColor: Colors.transparent,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () {},
+                tooltip: 'Search',
+              ),
+              IconButton(
+                icon: const Icon(Icons.more_vert),
+                onPressed: () => _showMoreSheet(context, colorScheme),
+                tooltip: 'More',
+              ),
+              const SizedBox(width: 8),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _greeting(),
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onSurface,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Text(
-                              unreadCount > 0
-                                  ? 'You have $unreadCount unread message${unreadCount == 1 ? '' : 's'}'
-                                  : 'All messages read',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                            if (state.isRefreshing) ...[
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  color: colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
+                  Text(
+                    _greeting(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                      fontSize: 20,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.search),
-                    onPressed: () {},
-                    tooltip: 'Search',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () {},
-                    tooltip: 'More',
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        unreadCount > 0
+                            ? '$unreadCount unread'
+                            : 'All read',
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -354,7 +334,10 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SmartAvatar(thread: thread, radius: 24),
+            GestureDetector(
+              onTap: () => _showContactSheet(context, thread, colorScheme),
+              child: SmartAvatar(thread: thread, radius: 24),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -414,11 +397,18 @@ class _HomePageState extends State<HomePage> {
                       if (isUnread) ...[
                         const SizedBox(width: 8),
                         Container(
-                          width: 10,
-                          height: 10,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: colorScheme.primary,
-                            shape: BoxShape.circle,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            thread.unreadCount > 99 ? '99+' : thread.unreadCount.toString(),
+                            style: TextStyle(
+                              color: colorScheme.onPrimary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -450,4 +440,160 @@ class _HomePageState extends State<HomePage> {
     }
     return DateFormat('MM/dd/yy').format(date); // 08/24/23
   }
+
+  void _showMoreSheet(BuildContext context, ColorScheme colorScheme) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.done_all_rounded),
+                title: const Text('Mark all as read'),
+                onTap: () {
+                  Navigator.pop(context);
+                  // TODO: Implement mark all as read
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings_outlined),
+                title: const Text('Settings'),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded),
+                title: const Text('About'),
+                onTap: () {
+                  Navigator.pop(context);
+                  showAboutDialog(
+                    context: context,
+                    applicationName: 'SMS Manager',
+                    applicationVersion: '1.0.0',
+                    applicationIcon: const Icon(Icons.message, size: 48),
+                    children: [
+                      const Text('A smart SMS manager with local AI categorization.')
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showContactSheet(BuildContext context, SmsThread thread, ColorScheme colorScheme) {
+    final isContact = thread.contactName != null && thread.contactName!.isNotEmpty;
+    final displayName = isContact ? thread.contactName! : thread.address;
+    final address = thread.address;
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              SmartAvatar(thread: thread, radius: 40),
+              const SizedBox(height: 16),
+              Text(
+                displayName,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (isContact) ...[
+                const SizedBox(height: 4),
+                Text(
+                  address,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _actionButton(
+                    context: context,
+                    icon: Icons.call_outlined,
+                    label: 'Call',
+                    onTap: () {
+                      Navigator.pop(context);
+                      // TODO: Launch dialer
+                    },
+                  ),
+                  _actionButton(
+                    context: context,
+                    icon: Icons.message_outlined,
+                    label: 'Message',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/home/conversation/${thread.id}', extra: thread);
+                    },
+                  ),
+                  _actionButton(
+                    context: context,
+                    icon: isContact ? Icons.person_outline : Icons.person_add_alt_1_outlined,
+                    label: isContact ? 'View' : 'Add',
+                    onTap: () {
+                      Navigator.pop(context);
+                      // TODO: Open contact card
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _actionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: colorScheme.primary, size: 28),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
+

@@ -8,6 +8,7 @@ class SmsThread extends Equatable {
   final String snippet;
   final int date;
   final bool read;
+  final int unreadCount;
   final String category; // E.g., 'Personal', 'Transactions', 'Promotions'
   final String? contactName;
   final String? contactPhotoUri;
@@ -20,6 +21,7 @@ class SmsThread extends Equatable {
     required this.snippet,
     required this.date,
     required this.read,
+    this.unreadCount = 0,
     this.category = 'All',
     this.contactName,
     this.contactPhotoUri,
@@ -34,6 +36,7 @@ class SmsThread extends Equatable {
       snippet: map['snippet'] as String? ?? '',
       date: (map['date'] as num?)?.toInt() ?? 0,
       read: ((map['read'] as num?)?.toInt() ?? 0) == 1,
+      unreadCount: (map['unreadCount'] as num?)?.toInt() ?? 0,
       category: map['category'] as String? ?? 'All',
       contactName: map['contactName'] as String?,
       contactPhotoUri: map['contactPhotoUri'] as String?,
@@ -49,6 +52,7 @@ class SmsThread extends Equatable {
       'snippet': snippet,
       'date': date,
       'read': read ? 1 : 0,
+      'unreadCount': unreadCount,
       'category': category,
       'contactName': contactName,
       'contactPhotoUri': contactPhotoUri,
@@ -60,6 +64,7 @@ class SmsThread extends Equatable {
     String? contactName,
     String? contactPhotoUri,
     bool? read,
+    int? unreadCount,
     String? snippet,
     int? date,
     String? address,
@@ -72,6 +77,7 @@ class SmsThread extends Equatable {
       snippet: snippet ?? this.snippet,
       date: date ?? this.date,
       read: read ?? this.read,
+      unreadCount: unreadCount ?? this.unreadCount,
       category: category ?? this.category,
       contactName: contactName ?? this.contactName,
       contactPhotoUri: contactPhotoUri ?? this.contactPhotoUri,
@@ -87,6 +93,7 @@ class SmsThread extends Equatable {
     snippet,
     date,
     read,
+    unreadCount,
     category,
     contactName,
     contactPhotoUri,

@@ -6,6 +6,9 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Telephony
 import android.util.Log
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -18,7 +21,14 @@ class MainActivity : FlutterActivity() {
         private const val QUERY_CHANNEL    = "sms_manager/query"
         private const val INCOMING_CHANNEL = "sms_manager/incoming"
         private const val REQUEST_CODE_SET_DEFAULT = 1001
+
+        // Track currently active conversation thread ID to suppress notifications
+        var activeThreadId: Long? = null
     }
+
+    // Holds the pending result for requestDefaultSmsRole so we can resolve it
+    // after the user responds to the system dialog (in onActivityResult).
+    private var pendingRoleResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -27,9 +37,18 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ROLE_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "isDefaultSmsApp"    -> result.success(isDefaultSmsApp())
-                    "requestDefaultSmsRole" -> { requestDefaultSmsRole(); result.success(null) }
-                    else                 -> result.notImplemented()
+                    "isDefaultSmsApp" -> result.success(isDefaultSmsApp())
+                    "requestDefaultSmsRole" -> {
+                        if (isDefaultSmsApp()) {
+                            // Already default — resolve immediately, no dialog needed
+                            result.success(true)
+                        } else {
+                            // Store the result; it will be resolved in onActivityResult
+                            pendingRoleResult = result
+                            requestDefaultSmsRole()
+                        }
+                    }
+                    else -> result.notImplemented()
                 }
             }
 
@@ -37,6 +56,12 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, QUERY_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+
+                    "setActiveThread" -> {
+                        val threadId = call.argument<Any>("threadId")?.toString()?.toLongOrNull()
+                        activeThreadId = threadId
+                        result.success(true)
+                    }
 
                     "fetchThreads" -> {
                         val limit  = call.argument<Any>("limit")?.toString()?.toIntOrNull()  ?: 500
@@ -74,17 +99,27 @@ class MainActivity : FlutterActivity() {
                     "sendSms" -> {
                         val address = call.argument<String>("address")
                         val body    = call.argument<String>("body")
+                        val subscriptionId = call.argument<Int>("subscriptionId")
                         if (address == null || body == null) {
                             result.error("INVALID_ARGUMENT", "address and body required", null)
                             return@setMethodCallHandler
                         }
                         Thread {
                             try {
-                                val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    getSystemService(android.telephony.SmsManager::class.java)
+                                val smsManager = if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        getSystemService(android.telephony.SmsManager::class.java).createForSubscriptionId(subscriptionId)
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        android.telephony.SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
+                                    }
                                 } else {
-                                    @Suppress("DEPRECATION")
-                                    android.telephony.SmsManager.getDefault()
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        getSystemService(android.telephony.SmsManager::class.java)
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        android.telephony.SmsManager.getDefault()
+                                    }
                                 }
 
                                 val parts = smsManager.divideMessage(body)
@@ -219,6 +254,69 @@ class MainActivity : FlutterActivity() {
                         }.start()
                     }
 
+                    "getOrCreateThreadId" -> {
+                        val address = call.argument<String>("address")
+                        if (address == null) {
+                            result.error("INVALID_ARGUMENT", "address required", null)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            try {
+                                val threadId = android.provider.Telephony.Threads.getOrCreateThreadId(this, address)
+                                runOnUiThread { result.success(threadId) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("THREAD_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
+                    "searchContacts" -> {
+                        val query = call.argument<String>("query")
+                        if (query == null) {
+                            result.error("INVALID_ARGUMENT", "query required", null)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            try {
+                                val contacts = mutableListOf<Map<String, String>>()
+                                val uri = android.net.Uri.withAppendedPath(
+                                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI,
+                                    android.net.Uri.encode(query)
+                                )
+                                val cursor = contentResolver.query(
+                                    uri,
+                                    arrayOf(
+                                        android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                                        android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER,
+                                        android.provider.ContactsContract.CommonDataKinds.Phone.PHOTO_URI
+                                    ),
+                                    null, null,
+                                    android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC LIMIT 20"
+                                )
+                                cursor?.use {
+                                    val nameIdx = it.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                                    val numberIdx = it.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                    val photoIdx = it.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.PHOTO_URI)
+                                    while (it.moveToNext()) {
+                                        val name = if (nameIdx >= 0) it.getString(nameIdx) ?: "" else ""
+                                        val number = if (numberIdx >= 0) it.getString(numberIdx) ?: "" else ""
+                                        val photo = if (photoIdx >= 0) it.getString(photoIdx) ?: "" else ""
+                                        if (number.isNotEmpty()) {
+                                            contacts.add(mapOf(
+                                                "name" to name,
+                                                "number" to number,
+                                                "photoUri" to photo
+                                            ))
+                                        }
+                                    }
+                                }
+                                runOnUiThread { result.success(contacts) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("CONTACT_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -236,6 +334,58 @@ class MainActivity : FlutterActivity() {
                     SmsReceiver.incomingSink = null
                 }
             })
+
+        // ── System SMS Database Observer ─────────────────────────────────────────
+        // Listens to Android's internal SMS database and pushes a debounce event
+        // whenever any app sends, receives, reads, or deletes an SMS.
+        var systemChangesSink: EventChannel.EventSink? = null
+        val dbChangeHandler = Handler(Looper.getMainLooper())
+        
+        val smsContentObserver = object : android.database.ContentObserver(dbChangeHandler) {
+            private val notifyRunnable = Runnable {
+                Log.d(TAG, "SmsContentObserver: DB changed, notifying Flutter")
+                systemChangesSink?.success("changed")
+            }
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                super.onChange(selfChange, uri)
+                // Debounce rapidly firing DB triggers
+                dbChangeHandler.removeCallbacks(notifyRunnable)
+                dbChangeHandler.postDelayed(notifyRunnable, 500)
+            }
+        }
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "sms_manager/system_changes")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    Log.d(TAG, "System changes EventChannel: listening")
+                    systemChangesSink = events
+                    try {
+                        contentResolver.registerContentObserver(
+                            Uri.parse("content://sms"), true, smsContentObserver
+                        )
+                        contentResolver.registerContentObserver(
+                            Uri.parse("content://mms-sms/conversations"), true, smsContentObserver
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to register ContentObserver", e)
+                    }
+                }
+                override fun onCancel(arguments: Any?) {
+                    Log.d(TAG, "System changes EventChannel: cancelled")
+                    systemChangesSink = null
+                    contentResolver.unregisterContentObserver(smsContentObserver)
+                }
+            })
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_SET_DEFAULT) {
+            // The system dialog for setting default SMS app just finished.
+            // Check if we are now the default SMS app and resolve the pending result.
+            pendingRoleResult?.success(isDefaultSmsApp())
+            pendingRoleResult = null
+        }
     }
 
     private fun isDefaultSmsApp(): Boolean {

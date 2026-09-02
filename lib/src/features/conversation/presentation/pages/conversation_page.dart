@@ -14,6 +14,7 @@ import 'package:sms_manager/src/features/conversation/presentation/widgets/scrol
 import 'package:sms_manager/src/features/home/presentation/bloc/home_bloc.dart';
 import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
 import 'package:sms_manager/src/core/widgets/timeline_scrollbar.dart';
+import 'package:sms_manager/src/services/native_sms_service.dart';
 
 class ConversationPage extends StatefulWidget {
   final int threadId;
@@ -44,6 +45,7 @@ class _ConversationPageState extends State<ConversationPage> {
   @override
   void initState() {
     super.initState();
+    NativeSmsService.setActiveThread(widget.threadId);
     _scrollController.addListener(_onScroll);
     final address = widget.address ?? '';
     context.read<ConversationBloc>().add(
@@ -53,6 +55,7 @@ class _ConversationPageState extends State<ConversationPage> {
 
   @override
   void dispose() {
+    NativeSmsService.setActiveThread(null);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     if (_readDebounce != null && _readDebounce!.isActive) {
@@ -136,6 +139,12 @@ class _ConversationPageState extends State<ConversationPage> {
     return BlocConsumer<ConversationBloc, ConversationState>(
       listener: (context, state) {
         if (state is ConversationLoaded) {
+          // Trigger read marking immediately for small conversations that don't scroll
+          if (state.messages.any((m) => !m.read && !m.isOutgoing)) {
+            _readDebounce?.cancel();
+            _readDebounce = Timer(const Duration(milliseconds: 400), _markVisibleRead);
+          }
+
           // Auto-scroll to bottom when a new message arrives and user is at bottom
           if (!_showScrollToBottom) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -186,11 +195,15 @@ class _ConversationPageState extends State<ConversationPage> {
                   _canReply
                       ? BlocBuilder<ConversationBloc, ConversationState>(
                           builder: (context, state) {
-                            final isSending =
-                                state is ConversationLoaded && state.isSending;
+                            final isSending = state is ConversationLoaded && state.isSending;
+                            final simInfoList = state is ConversationLoaded ? state.simInfoList : const <Map<String, dynamic>>[];
+                            final selectedSimId = state is ConversationLoaded ? state.selectedSimId : null;
+                            
                             return ComposeBar(
                               address: widget.address ?? '',
                               isSending: isSending,
+                              simInfoList: simInfoList,
+                              selectedSimId: selectedSimId,
                               onSend: (body) {
                                 context.read<ConversationBloc>().add(
                                       SendMessage(
@@ -199,6 +212,9 @@ class _ConversationPageState extends State<ConversationPage> {
                                         body: body,
                                       ),
                                     );
+                              },
+                              onSimSelected: (id) {
+                                context.read<ConversationBloc>().add(SelectSim(id));
                               },
                             );
                           },

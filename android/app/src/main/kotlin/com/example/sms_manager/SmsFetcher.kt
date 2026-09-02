@@ -60,13 +60,15 @@ object SmsFetcher {
                         "snippet"      to (c.getString(bodyIdx)    ?: ""),
                         "date"         to c.getLong(dateIdx),
                         "read"         to c.getInt(readIdx),  // 0=unread for this msg
-                        "messageCount" to 0,
-                        "hasUnread"    to (c.getInt(readIdx) == 0)
+                        "messageCount" to 1,
+                        "hasUnread"    to (c.getInt(readIdx) == 0),
+                        "unreadCount"  to if (c.getInt(readIdx) == 0) 1 else 0
                     )
                 } else {
                     // Track unread: if ANY message in this thread is unread, mark thread unread
                     if (c.getInt(readIdx) == 0) {
                         threadData[tid]!!["hasUnread"] = true
+                        threadData[tid]!!["unreadCount"] = (threadData[tid]!!["unreadCount"] as Int) + 1
                     }
                     threadData[tid]!!["messageCount"] = (threadData[tid]!!["messageCount"] as Int) + 1
                 }

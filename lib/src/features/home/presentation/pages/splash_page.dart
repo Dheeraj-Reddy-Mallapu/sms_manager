@@ -20,11 +20,9 @@ class _SplashPageState extends State<SplashPage> {
     // Prompt for Default SMS Role (required for fetching/receiving smoothly)
     bool isDefault = await NativeSmsService.isDefaultSmsApp();
     if (!isDefault) {
-      await NativeSmsService.requestDefaultSmsRole();
+      // This will now pause execution until the user accepts or dismisses the system dialog
+      isDefault = await NativeSmsService.requestDefaultSmsRole();
     }
-
-    // Brief delay for visual effect
-    await Future.delayed(const Duration(seconds: 1));
 
     if (mounted) {
       context.go('/home');

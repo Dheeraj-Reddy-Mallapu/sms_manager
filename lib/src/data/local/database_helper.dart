@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -37,6 +37,7 @@ CREATE TABLE threads (
   snippet     TEXT NOT NULL,
   date        INTEGER NOT NULL,
   read        INTEGER NOT NULL,
+  unreadCount INTEGER NOT NULL DEFAULT 0,
   category    TEXT NOT NULL,
   contactName TEXT,
   contactPhotoUri TEXT,
@@ -89,6 +90,13 @@ CREATE TABLE messages (
       try {
         await db.execute(
           'ALTER TABLE messages ADD COLUMN subscriptionId INTEGER NOT NULL DEFAULT -1',
+        );
+      } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      try {
+        await db.execute(
+          'ALTER TABLE threads ADD COLUMN unreadCount INTEGER NOT NULL DEFAULT 0',
         );
       } catch (_) {}
     }

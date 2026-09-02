@@ -15,9 +15,10 @@ abstract class HomeEvent extends Equatable {
 
 class LoadThreads extends HomeEvent {
   final bool forceSync;
-  const LoadThreads({this.forceSync = false});
+  final int? syncLimit;
+  const LoadThreads({this.forceSync = false, this.syncLimit});
   @override
-  List<Object?> get props => [forceSync];
+  List<Object?> get props => [forceSync, syncLimit];
 }
 
 class BackgroundRefreshCompleted extends HomeEvent {
@@ -90,11 +91,17 @@ class HomeError extends HomeState {
   List<Object?> get props => [message];
 }
 
+class SystemSmsChanged extends HomeEvent {
+  const SystemSmsChanged();
+}
+
 // ── BLoC ─────────────────────────────────────────────────────────────────────
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final SmsRepository repository;
   StreamSubscription<Map<String, dynamic>>? _incomingSubscription;
+  StreamSubscription<void>? _systemChangesSubscription;
+  DateTime? _lastSystemChange;
 
   HomeBloc({required this.repository}) : super(HomeInitial()) {
     on<LoadThreads>(_onLoadThreads);
@@ -102,11 +109,33 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<ChangeCategoryFilter>(_onChangeCategory);
     on<IncomingSmsReceived>(_onIncomingSms);
     on<RefreshReadState>(_onRefreshReadState);
+    on<SystemSmsChanged>(_onSystemSmsChanged);
 
     _incomingSubscription = repository.incomingSmsStream.listen(
       (data) => add(IncomingSmsReceived(data)),
       onError: (_) {},
     );
+
+    _systemChangesSubscription = repository.systemSmsChanges.listen(
+      (_) => add(const SystemSmsChanged()),
+      onError: (_) {},
+    );
+  }
+
+  Future<void> _onSystemSmsChanged(
+    SystemSmsChanged event,
+    Emitter<HomeState> emit,
+  ) async {
+    // Basic throttle since Kotlin already debounces, just to be safe
+    final now = DateTime.now();
+    if (_lastSystemChange != null &&
+        now.difference(_lastSystemChange!).inMilliseconds < 400) {
+      return;
+    }
+    _lastSystemChange = now;
+    // When the system DB changes (e.g. after sending an SMS), we only need 
+    // to sync the most recent threads to be fast.
+    add(const LoadThreads(forceSync: true, syncLimit: 20));
   }
 
   Future<void> _onLoadThreads(
@@ -124,18 +153,39 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     }
 
     try {
-      // Fast path: SQLite cache (forceSync = false returns cache immediately)
+      // Load all from SQLite (fast local cache)
       final cached = await repository.getThreads(
         limit: 10000,
-        forceSync: event.forceSync,
+        forceSync: false,
       );
 
       final category = current is HomeLoaded ? current.activeCategory : 'All';
-      emit(HomeLoaded(threads: cached, activeCategory: category, isRefreshing: true));
+      emit(HomeLoaded(threads: cached, activeCategory: category, isRefreshing: false));
 
-      // Background-refresh from native (always runs to pick up new messages)
-      final fresh = await repository.backgroundRefresh(limit: 10000);
-      add(BackgroundRefreshCompleted(fresh));
+      if (event.forceSync) {
+        // Fast delta sync when an SMS is sent/received
+        await repository.backgroundRefresh(limit: event.syncLimit ?? 50);
+        final allThreads = await repository.getThreads(limit: 10000, forceSync: false);
+        add(BackgroundRefreshCompleted(allThreads));
+      } else {
+        // Normal app launch: do a paginated sync to catch up or fill DB seamlessly
+        // We sync up to 10000, but in chunks of 50. This way the user sees the first 50
+        // almost instantly on first install, and the rest fill in seamlessly.
+        // (For a production app you might only paginate fully if cache is empty, 
+        // and just do a small sync if cache is full, but we will paginate fully here)
+        final stream = repository.syncThreadsPaginated(maxLimit: 10000, chunkSize: 50);
+        await for (final updatedThreads in stream) {
+          if (isClosed) break;
+          // Emit each chunk as it arrives
+          add(BackgroundRefreshCompleted(updatedThreads));
+          
+          // Optimization: if cache was already full, maybe we only need one chunk to catch up
+          if (cached.isNotEmpty && updatedThreads.length == cached.length) {
+            // We could break early here if we implemented a proper SyncManager, 
+            // but we'll let it paginate.
+          }
+        }
+      }
     } catch (e) {
       if (current is HomeLoaded) {
         emit(current.copyWith(isRefreshing: false));
@@ -194,6 +244,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   @override
   Future<void> close() {
     _incomingSubscription?.cancel();
+    _systemChangesSubscription?.cancel();
     return super.close();
   }
 }

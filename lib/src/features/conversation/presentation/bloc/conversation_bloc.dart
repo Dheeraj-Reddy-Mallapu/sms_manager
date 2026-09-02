@@ -94,6 +94,17 @@ class IncomingMessageReceived extends ConversationEvent {
   List<Object?> get props => [data];
 }
 
+class SystemMessagesChanged extends ConversationEvent {
+  const SystemMessagesChanged();
+}
+
+class SelectSim extends ConversationEvent {
+  final int? subscriptionId;
+  const SelectSim(this.subscriptionId);
+  @override
+  List<Object?> get props => [subscriptionId];
+}
+
 // ── States ───────────────────────────────────────────────────────────────────
 
 abstract class ConversationState extends Equatable {
@@ -119,6 +130,9 @@ class ConversationLoaded extends ConversationState {
   final Set<int> selectedIds; // non-empty → multi-select mode
   final String searchQuery; // non-empty → search mode
   final Set<int> alreadyReadIds; // ids we've already sent markAsRead for
+  
+  final List<Map<String, dynamic>> simInfoList; // List of active SIMs
+  final int? selectedSimId; // currently selected subscriptionId (null = system default)
 
   const ConversationLoaded({
     required this.messages,
@@ -130,6 +144,8 @@ class ConversationLoaded extends ConversationState {
     this.selectedIds = const {},
     this.searchQuery = '',
     this.alreadyReadIds = const {},
+    this.simInfoList = const [],
+    this.selectedSimId,
   });
 
   /// Messages filtered by search query (empty = all)
@@ -149,6 +165,8 @@ class ConversationLoaded extends ConversationState {
     Set<int>? selectedIds,
     String? searchQuery,
     Set<int>? alreadyReadIds,
+    List<Map<String, dynamic>>? simInfoList,
+    int? selectedSimId,
   }) => ConversationLoaded(
     messages: messages ?? this.messages,
     threadId: threadId,
@@ -159,6 +177,8 @@ class ConversationLoaded extends ConversationState {
     selectedIds: selectedIds ?? this.selectedIds,
     searchQuery: searchQuery ?? this.searchQuery,
     alreadyReadIds: alreadyReadIds ?? this.alreadyReadIds,
+    simInfoList: simInfoList ?? this.simInfoList,
+    selectedSimId: selectedSimId ?? this.selectedSimId,
   );
 
   @override
@@ -171,6 +191,8 @@ class ConversationLoaded extends ConversationState {
     selectedIds,
     searchQuery,
     alreadyReadIds,
+    simInfoList,
+    selectedSimId,
   ];
 }
 
@@ -186,6 +208,8 @@ class ConversationError extends ConversationState {
 class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
   final SmsRepository repository;
   StreamSubscription<Map<String, dynamic>>? _incomingSubscription;
+  StreamSubscription<void>? _systemChangesSubscription;
+  DateTime? _lastSystemChange;
 
   static const _pageSize = 50;
 
@@ -201,6 +225,12 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     on<ClearSearch>(_onClearSearch);
     on<MarkVisibleAsRead>(_onMarkVisibleAsRead);
     on<IncomingMessageReceived>(_onIncomingMessage);
+    on<SystemMessagesChanged>(_onSystemMessagesChanged);
+    on<SelectSim>(_onSelectSim);
+
+    _systemChangesSubscription = repository.systemSmsChanges.listen((_) {
+      add(const SystemMessagesChanged());
+    }, onError: (_) {});
   }
 
   // ── Load initial page ──────────────────────────────────────────────────
@@ -250,6 +280,12 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
       );
       final freshDisplay = _toDisplayOrder(fresh);
 
+      final simInfoList = await repository.getSimInfo();
+      int? defaultSimId;
+      if (simInfoList.isNotEmpty) {
+        defaultSimId = simInfoList.first['subscriptionId'] as int?;
+      }
+
       if (!isClosed) {
         emit(
           ConversationLoaded(
@@ -257,6 +293,8 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
             threadId: event.threadId,
             address: event.address,
             hasMore: fresh.length >= _pageSize,
+            simInfoList: simInfoList,
+            selectedSimId: defaultSimId,
           ),
         );
       }
@@ -335,6 +373,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
         event.threadId,
         event.address,
         event.body,
+        subscriptionId: current.selectedSimId,
       );
 
       if (success) {
@@ -346,8 +385,10 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
           forceSync: true,
         );
         final freshDisplay = _toDisplayOrder(fresh);
+        final merged = _mergeMessages(current.messages, freshDisplay);
+        
         if (!isClosed) {
-          emit(current.copyWith(messages: freshDisplay, isSending: false));
+          emit(current.copyWith(messages: merged, isSending: false));
         }
       } else {
         // Mark optimistic as failed
@@ -494,9 +535,10 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
       forceSync: true,
     );
     final freshDisplay = _toDisplayOrder(fresh);
+    final merged = _mergeMessages(current.messages, freshDisplay);
 
     if (!isClosed) {
-      emit(current.copyWith(messages: freshDisplay));
+      emit(current.copyWith(messages: merged));
     }
   }
 
@@ -507,8 +549,68 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     return descList.reversed.toList();
   }
 
+  /// Merges a fresh page of newest messages with the currently loaded older messages
+  /// so that we don't lose older messages if the user scrolled up.
+  List<SmsMessage> _mergeMessages(List<SmsMessage> currentList, List<SmsMessage> freshNewestList) {
+    final freshIds = freshNewestList.map((m) => m.id).toSet();
+    final olderKeep = currentList.where((m) => !freshIds.contains(m.id)).toList();
+    return [...olderKeep, ...freshNewestList];
+  }
+
+  // ── Database System Changes ────────────────────────────────────────────
+
+  void _onSelectSim(
+    SelectSim event,
+    Emitter<ConversationState> emit,
+  ) {
+    final current = state;
+    if (current is ConversationLoaded) {
+      emit(current.copyWith(selectedSimId: event.subscriptionId));
+    }
+  }
+
+  Future<void> _onSystemMessagesChanged(
+    SystemMessagesChanged event,
+    Emitter<ConversationState> emit,
+  ) async {
+    final current = state;
+    if (current is! ConversationLoaded) return;
+
+    // Debounce rapid system changes
+    final now = DateTime.now();
+    if (_lastSystemChange != null && now.difference(_lastSystemChange!).inMilliseconds < 500) {
+      return;
+    }
+    _lastSystemChange = now;
+
+    try {
+      // Small delay to allow any local SQLite writes to settle, although NativeSmsService
+      // systemSmsChanges actually fires from Android content observer.
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Fetch latest messages from Native to get external changes
+      final fresh = await repository.getMessages(
+        current.threadId,
+        limit: _pageSize,
+        offset: 0,
+        forceSync: true,
+      );
+      final freshDisplay = _toDisplayOrder(fresh);
+      
+      // We only merge the first page so we don't overwrite older loaded messages.
+      // If the user scrolled deep and an old message was deleted by another app, 
+      // they might still see it until they refresh, but that's a rare edge case.
+      final merged = _mergeMessages(current.messages, freshDisplay);
+
+      if (!isClosed) {
+        emit(current.copyWith(messages: merged));
+      }
+    } catch (_) {}
+  }
+
   @override
   Future<void> close() {
+    _systemChangesSubscription?.cancel();
     _incomingSubscription?.cancel();
     return super.close();
   }

@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Dual SIM / Subscription Info -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
     <application
         android:label="SMS Manager"
         android:name="${applicationName}"

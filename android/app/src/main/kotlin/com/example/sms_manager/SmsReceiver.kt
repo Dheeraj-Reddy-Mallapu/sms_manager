@@ -76,7 +76,12 @@ class SmsReceiver : BroadcastReceiver() {
                 }
 
                 // ── 4. Show push notification ──
-                showNotification(context, address, displayName, contactPhotoUri, body, timestamp)
+                val threadId = Telephony.Threads.getOrCreateThreadId(context, address)
+                if (MainActivity.activeThreadId != threadId) {
+                    showNotification(context, address, displayName, contactPhotoUri, body, timestamp, threadId)
+                } else {
+                    Log.d(TAG, "Suppressing notification: user is viewing thread $threadId")
+                }
             } finally {
                 pendingResult.finish()
             }
@@ -113,7 +118,8 @@ class SmsReceiver : BroadcastReceiver() {
         displayName: String,
         contactPhotoUri: String?,
         body: String,
-        timestamp: Long
+        timestamp: Long,
+        threadId: Long
     ) {
         createNotificationChannel(context)
 
@@ -173,7 +179,6 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         // Tap action → open app
-        val threadId = Telephony.Threads.getOrCreateThreadId(context, address)
         val openIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             action = Intent.ACTION_VIEW

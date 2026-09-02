@@ -15,6 +15,15 @@ class NativeSmsService {
     return _incomingStream!;
   }
 
+  // ── Singleton stream for DB system changes ──
+  static const _systemChangesChannel = EventChannel('sms_manager/system_changes');
+  static Stream<void>? _systemChangesStream;
+
+  static Stream<void> get systemSmsChanges {
+    _systemChangesStream ??= _systemChangesChannel.receiveBroadcastStream().map((_) {});
+    return _systemChangesStream!;
+  }
+
   // ── Default SMS App ──────────────────────────────────────────────
 
   static Future<bool> isDefaultSmsApp() async {
@@ -25,13 +34,45 @@ class NativeSmsService {
     }
   }
 
-  static Future<void> requestDefaultSmsRole() async {
+  static Future<bool> requestDefaultSmsRole() async {
     try {
-      await _roleChannel.invokeMethod('requestDefaultSmsRole');
-    } catch (_) {}
+      return await _roleChannel.invokeMethod<bool>('requestDefaultSmsRole') ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── Threads ──────────────────────────────────────────────────────
+
+  static Future<void> setActiveThread(int? threadId) async {
+    try {
+      await _queryChannel.invokeMethod('setActiveThread', {'threadId': threadId});
+    } catch (_) {}
+  }
+
+  static Future<int?> getOrCreateThreadId(String address) async {
+    try {
+      final id = await _queryChannel.invokeMethod('getOrCreateThreadId', {'address': address});
+      // Depending on Kotlin result, it might be an int or a string that parses to int, or a Long in Kotlin which is int in Dart.
+      if (id is int) return id;
+      if (id is String) return int.tryParse(id);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Contacts ──────────────────────────────────────────────────────
+
+  static Future<List<Map<String, String>>> searchContacts(String query) async {
+    try {
+      final List<dynamic>? result = await _queryChannel.invokeMethod('searchContacts', {'query': query});
+      if (result == null) return [];
+      return result.map((e) => Map<String, String>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
 
   /// Fetches thread summaries. Contact lookup is done natively inside
   /// SmsFetcher (no per-thread MethodChannel round trips).
@@ -68,13 +109,26 @@ class NativeSmsService {
     }
   }
 
+  // ── SIM Info ─────────────────────────────────────────────────────
+
+  static Future<List<Map<String, dynamic>>> getSimInfo() async {
+    try {
+      final List<dynamic>? result = await _queryChannel.invokeMethod('getSimInfo');
+      if (result == null) return [];
+      return result.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   // ── Send SMS ─────────────────────────────────────────────────────
 
-  static Future<bool> sendSms(String address, String body) async {
+  static Future<bool> sendSms(String address, String body, {int? subscriptionId}) async {
     try {
       return await _queryChannel.invokeMethod<bool>('sendSms', {
             'address': address,
             'body': body,
+            'subscriptionId': subscriptionId,
           }) ??
           false;
     } catch (e) {

@@ -279,7 +279,11 @@ class _ConversationPageState extends State<ConversationPage> {
         onPressed: () => context.pop(),
       ),
       title: GestureDetector(
-        onTap: () {}, // profile tap - reserved
+        onTap: () {
+          if (widget.address != null && widget.address!.isNotEmpty) {
+            NativeSmsService.openContactCard(widget.address!);
+          }
+        },
         child: Row(
           children: [
             SmartAvatar(
@@ -573,7 +577,15 @@ class _ConversationPageState extends State<ConversationPage> {
     MessageSheet.show(
       context,
       message: message,
-      onCopy: () {},
+      onCopy: () {
+        Clipboard.setData(ClipboardData(text: message.body));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Copied'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      },
       onForward: () {
         context.go('/home/compose', extra: message.body);
       },

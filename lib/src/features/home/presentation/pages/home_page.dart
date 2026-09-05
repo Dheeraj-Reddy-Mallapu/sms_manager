@@ -111,7 +111,6 @@ class _HomePageState extends State<HomePage> {
   ) {
     // Filter threads based on active category
     final filteredThreads = _filterThreads(state.threads, state.activeCategory);
-    final unreadCount = state.threads.where((t) => !t.read).length;
 
     return TimelineScrollbar(
       controller: _scrollController,
@@ -274,13 +273,11 @@ class _HomePageState extends State<HomePage> {
       child: Row(
         children: categories.map((category) {
           final isSelected = state.activeCategory == category;
-          final unreadForChip = category == 'Unread'
+          final badgeCount = category == 'Unread'
               ? state.threads.where((t) => !t.read).length
-              : 0;
+              : (category == 'All' ? state.threads.length : 0);
 
-          final displayLabel = category == 'All' 
-              ? 'All (${state.threads.length})' 
-              : category;
+          final displayLabel = category;
 
           return Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -289,7 +286,7 @@ class _HomePageState extends State<HomePage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(displayLabel),
-                  if (category == 'Unread' && unreadForChip > 0) ...[
+                  if (badgeCount > 0) ...[
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -303,7 +300,7 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        unreadForChip > 999 ? '999+' : unreadForChip.toString(),
+                        badgeCount > 999 ? '999+' : badgeCount.toString(),
                         style: TextStyle(
                           color: isSelected
                               ? colorScheme.primary
@@ -561,13 +558,7 @@ class _HomePageState extends State<HomePage> {
                   );
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.settings_outlined),
-                title: const Text('Settings'),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
+
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded),
                 title: const Text('About'),

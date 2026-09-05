@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_litert/flutter_litert.dart';
+import 'package:flutter/foundation.dart';
 
 import 'dart:io';
 
@@ -10,14 +11,14 @@ void main() {
     final file = File('assets/nihal-minilm.tflite');
     final interpreter = Interpreter.fromFile(file);
 
-    print('Inputs:');
+    debugPrint('Inputs:');
     for (var tensor in interpreter.getInputTensors()) {
-      print('${tensor.name}: shape ${tensor.shape}, type ${tensor.type}');
+      debugPrint('${tensor.name}: shape ${tensor.shape}, type ${tensor.type}');
     }
 
-    print('Outputs:');
+    debugPrint('Outputs:');
     for (var tensor in interpreter.getOutputTensors()) {
-      print('${tensor.name}: shape ${tensor.shape}, type ${tensor.type}');
+      debugPrint('${tensor.name}: shape ${tensor.shape}, type ${tensor.type}');
     }
   });
 }

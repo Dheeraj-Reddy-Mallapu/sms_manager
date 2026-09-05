@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sms_manager/src/services/native_sms_service.dart';
 import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
+import 'package:sms_manager/src/data/models/sms_thread.dart';
 
 class ComposePage extends StatefulWidget {
   final String? initialBody;
@@ -72,9 +73,20 @@ class _ComposePageState extends State<ComposePage> {
     final address = number;
     final threadId = await NativeSmsService.getOrCreateThreadId(address);
     if (threadId != null && mounted) {
+      final tempThread = SmsThread(
+        id: threadId,
+        recipientIds: '',
+        address: address,
+        messageCount: 0,
+        snippet: '',
+        date: DateTime.now().millisecondsSinceEpoch,
+        read: true,
+        contactName: name.isNotEmpty ? name : null,
+        contactPhotoUri: photoUri.isNotEmpty ? photoUri : null,
+      );
       context.pushReplacement(
         '/home/conversation/$threadId',
-        extra: {'thread': null, 'initialBody': widget.initialBody},
+        extra: {'thread': tempThread, 'initialBody': widget.initialBody},
       );
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -132,14 +144,6 @@ class _ComposePageState extends State<ComposePage> {
                       isDense: true,
                     ),
                   ),
-                ),
-                // (Optional) Dialer / Contact picker icon
-                IconButton(
-                  icon: const Icon(Icons.dialpad),
-                  onPressed: () {
-                    // Could open native contact picker, but not strictly needed
-                    // since we search contacts natively.
-                  },
                 ),
               ],
             ),

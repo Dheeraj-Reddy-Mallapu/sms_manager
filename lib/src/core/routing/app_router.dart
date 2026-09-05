@@ -9,6 +9,7 @@ import 'package:sms_manager/src/features/compose/presentation/pages/compose_page
 import 'package:sms_manager/src/features/home/presentation/pages/home_page.dart';
 import 'package:sms_manager/src/features/home/presentation/pages/splash_page.dart';
 
+
 /// Helper: wraps ConversationPage in its own BlocProvider so each
 /// conversation gets an independent ConversationBloc instance.
 Widget _conversationRoute(int threadId, SmsThread? thread) {
@@ -67,6 +68,7 @@ final appRouter = GoRouter(
             return ComposePage(initialBody: initialBody);
           },
         ),
+
       ],
     ),
 

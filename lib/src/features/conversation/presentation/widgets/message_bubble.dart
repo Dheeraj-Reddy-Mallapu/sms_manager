@@ -3,7 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:sms_manager/src/data/models/sms_message.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:sms_manager/src/core/utils/smart_text_parser.dart';
+import 'package:sms_manager/src/features/conversation/presentation/widgets/entity_bottom_sheet.dart';
 
 /// Bubble position within a group — determines which corners get rounded.
 enum BubblePosition { solo, first, middle, last }
@@ -186,7 +187,49 @@ class MessageBubble extends StatelessWidget {
     if (searchQuery.isNotEmpty) {
       return _buildSearchHighlight(body, textColor);
     }
-    return _buildRichText(body, textColor, context);
+
+    final tokens = SmartTextParser.parse(body);
+    final otps = tokens.where((t) => t.type == TokenType.otp).toList();
+
+    Widget content = _buildSmartText(tokens, textColor, context);
+
+    if (otps.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          content,
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: otps.map((otp) {
+              return ActionChip(
+                label: Text('Copy ${otp.text}'),
+                avatar: const Icon(Icons.copy, size: 16),
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                labelStyle: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+                side: BorderSide.none,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: otp.text));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Code copied'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              );
+            }).toList(),
+          ),
+        ],
+      );
+    }
+
+    return content;
   }
 
   Widget _buildSearchHighlight(String body, Color textColor) {
@@ -220,65 +263,76 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  /// Detects URLs, phone numbers, emails and makes them directly tappable
-  /// using TapGestureRecognizer — no SelectableText needed.
-  Widget _buildRichText(String body, Color textColor, BuildContext context) {
-    final pattern = RegExp(
-      r'(https?://[^\s]+)|(www\.[^\s]+)|(\+?[0-9][\d\s\-(]{7,}[0-9])|([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})',
-    );
-    final matches = pattern.allMatches(body);
-    if (matches.isEmpty) {
-      return Text(body, style: TextStyle(color: textColor, fontSize: 15));
-    }
+  Widget _buildSmartText(
+    List<MessageToken> tokens,
+    Color textColor,
+    BuildContext context,
+  ) {
+    if (tokens.isEmpty) return const SizedBox.shrink();
 
     final spans = <InlineSpan>[];
-    int lastEnd = 0;
-    for (final m in matches) {
-      if (m.start > lastEnd) {
-        spans.add(TextSpan(text: body.substring(lastEnd, m.start)));
-      }
-      final matched = m.group(0)!;
-      spans.add(
-        TextSpan(
-          text: matched,
-          style: TextStyle(
-            color: textColor,
-            decoration: TextDecoration.underline,
-            fontWeight: FontWeight.w600,
+    for (final token in tokens) {
+      if (token.type == TokenType.text) {
+        spans.add(TextSpan(text: token.text));
+      } else {
+        IconData? iconData;
+        switch (token.type) {
+          case TokenType.url:
+            iconData = Icons.language;
+            break;
+          case TokenType.phone:
+            iconData = Icons.phone;
+            break;
+          case TokenType.email:
+            iconData = Icons.mail;
+            break;
+          case TokenType.date:
+            iconData = Icons.calendar_today;
+            break;
+          case TokenType.otp:
+            iconData = Icons.password;
+            break;
+          default:
+            break;
+        }
+
+        if (iconData != null) {
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 2, left: 2),
+                child: Icon(
+                  iconData,
+                  size: 14,
+                  color: textColor.withOpacity(0.8),
+                ),
+              ),
+            ),
+          );
+        }
+
+        spans.add(
+          TextSpan(
+            text: token.text,
+            style: TextStyle(
+              color: textColor,
+              decoration: TextDecoration.underline,
+              fontWeight: FontWeight.w600,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () {
+                showEntityBottomSheet(context, token);
+              },
           ),
-          recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(matched),
-        ),
-      );
-      lastEnd = m.end;
-    }
-    if (lastEnd < body.length) {
-      spans.add(TextSpan(text: body.substring(lastEnd)));
+        );
+      }
     }
 
     return Text.rich(
-      TextSpan(
-        children: spans,
-        style: TextStyle(color: textColor, fontSize: 15),
-      ),
+      TextSpan(children: spans),
+      style: TextStyle(color: textColor, fontSize: 15),
     );
-  }
-
-  void _launchUrl(String raw) async {
-    Uri? uri;
-    if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      uri = Uri.tryParse(raw);
-    } else if (raw.startsWith('www.')) {
-      uri = Uri.tryParse('https://$raw');
-    } else if (raw.contains('@')) {
-      uri = Uri.tryParse('mailto:$raw');
-    } else {
-      // Phone number
-      final digits = raw.replaceAll(RegExp(r'[\s\-()]'), '');
-      uri = Uri.tryParse('tel:$digits');
-    }
-    if (uri != null && await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 
   Widget _statusIcon(Color color) {

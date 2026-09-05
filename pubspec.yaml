@@ -30,7 +30,6 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_local_notifications: ^22.3.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

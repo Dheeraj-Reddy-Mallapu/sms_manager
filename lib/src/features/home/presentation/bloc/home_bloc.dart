@@ -257,13 +257,18 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   ) {
     final current = state;
     final category = current is HomeLoaded ? current.activeCategory : 'All';
-    
+
     // Push top 4 threads to native for dynamic shortcuts / Direct Share
-    final topThreads = event.threads.take(4).map((t) => {
-      'threadId': t.id,
-      'address': t.address,
-      'contactName': t.contactName ?? t.address,
-    }).toList();
+    final topThreads = event.threads
+        .take(4)
+        .map(
+          (t) => {
+            'threadId': t.id,
+            'address': t.address,
+            'contactName': t.contactName ?? t.address,
+          },
+        )
+        .toList();
     NativeSmsService.pushShortcuts(topThreads);
 
     emit(

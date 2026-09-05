@@ -147,6 +147,42 @@ class NativeSmsService {
     }
   }
 
+  // ── Drafts ───────────────────────────────────────────────────────
+
+  static Future<bool> saveDraft(String address, String body) async {
+    try {
+      return await _queryChannel.invokeMethod<bool>('saveDraft', {
+            'address': address,
+            'body': body,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<String> getDraft(String address) async {
+    try {
+      return await _queryChannel.invokeMethod<String>('getDraft', {
+            'address': address,
+          }) ??
+          '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Future<bool> deleteDraft(String address) async {
+    try {
+      return await _queryChannel.invokeMethod<bool>('deleteDraft', {
+            'address': address,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── SIM Info ─────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getSimInfo() async {

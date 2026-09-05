@@ -1,5 +1,8 @@
-import 'package:material_ui/material_ui.dart';
+import 'dart:async';
+
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:sms_manager/src/services/native_sms_service.dart';
 
 class ComposeBar extends StatefulWidget {
   final String address;
@@ -27,11 +30,10 @@ class ComposeBar extends StatefulWidget {
 }
 
 class _ComposeBarState extends State<ComposeBar> {
-  static final Map<String, String> _drafts = {};
-
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   int _charCount = 0;
+  Timer? _debounce;
 
   static const _smsLimit = 160;
   static const _multipartLimit = 153; // GSM-7 chars per part when multipart
@@ -39,25 +41,35 @@ class _ComposeBarState extends State<ComposeBar> {
   @override
   void initState() {
     super.initState();
-    // Restore draft if exists, or use initialBody
-    final savedDraft = _drafts[widget.address] ?? '';
-    if (savedDraft.isNotEmpty) {
-      _controller.text = savedDraft;
-      _charCount = savedDraft.length;
-    } else if (widget.initialBody != null && widget.initialBody!.isNotEmpty) {
-      _controller.text = widget.initialBody!;
-      _charCount = widget.initialBody!.length;
-    }
+    _loadDraft();
 
     _controller.addListener(() {
       final text = _controller.text;
-      _drafts[widget.address] = text;
       setState(() => _charCount = text.length);
+
+      if (_debounce?.isActive ?? false) _debounce!.cancel();
+      _debounce = Timer(const Duration(milliseconds: 1000), () {
+        NativeSmsService.saveDraft(widget.address, text);
+      });
     });
+  }
+
+  Future<void> _loadDraft() async {
+    final savedDraft = await NativeSmsService.getDraft(widget.address);
+    if (mounted) {
+      if (savedDraft.isNotEmpty) {
+        _controller.text = savedDraft;
+        _charCount = savedDraft.length;
+      } else if (widget.initialBody != null && widget.initialBody!.isNotEmpty) {
+        _controller.text = widget.initialBody!;
+        _charCount = widget.initialBody!.length;
+      }
+    }
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -68,7 +80,7 @@ class _ComposeBarState extends State<ComposeBar> {
     if (text.isEmpty || widget.isSending) return;
     HapticFeedback.lightImpact();
     widget.onSend(text);
-    _drafts.remove(widget.address);
+    NativeSmsService.deleteDraft(widget.address);
     _controller.clear();
     setState(() => _charCount = 0);
   }

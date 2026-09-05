@@ -8,7 +8,7 @@ import 'package:sms_manager/src/data/models/sms_thread.dart';
 
 class ComposePage extends StatefulWidget {
   final String? initialBody;
-  
+
   const ComposePage({super.key, this.initialBody});
 
   @override

@@ -277,6 +277,85 @@ class MainActivity : FlutterActivity() {
                         }.start()
                     }
 
+                    "saveDraft" -> {
+                        val address = call.argument<String>("address")
+                        val body = call.argument<String>("body")
+                        if (address == null || body == null) {
+                            result.error("INVALID_ARGUMENT", "address and body required", null)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            try {
+                                contentResolver.delete(
+                                    Telephony.Sms.CONTENT_URI,
+                                    "${Telephony.Sms.ADDRESS} = ? AND ${Telephony.Sms.TYPE} = ?",
+                                    arrayOf(address, Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
+                                )
+                                if (body.isNotEmpty()) {
+                                    val values = android.content.ContentValues().apply {
+                                        put(Telephony.Sms.ADDRESS, address)
+                                        put(Telephony.Sms.BODY, body)
+                                        put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_DRAFT)
+                                        put(Telephony.Sms.READ, 1)
+                                        put(Telephony.Sms.DATE, System.currentTimeMillis())
+                                    }
+                                    contentResolver.insert(Telephony.Sms.CONTENT_URI, values)
+                                }
+                                runOnUiThread { result.success(true) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("SAVE_DRAFT_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
+                    "getDraft" -> {
+                        val address = call.argument<String>("address")
+                        if (address == null) {
+                            result.error("INVALID_ARGUMENT", "address required", null)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            try {
+                                var draftBody = ""
+                                val cursor = contentResolver.query(
+                                    Telephony.Sms.CONTENT_URI,
+                                    arrayOf(Telephony.Sms.BODY),
+                                    "${Telephony.Sms.ADDRESS} = ? AND ${Telephony.Sms.TYPE} = ?",
+                                    arrayOf(address, Telephony.Sms.MESSAGE_TYPE_DRAFT.toString()),
+                                    "${Telephony.Sms.DATE} DESC"
+                                )
+                                cursor?.use {
+                                    if (it.moveToFirst()) {
+                                        draftBody = it.getString(it.getColumnIndexOrThrow(Telephony.Sms.BODY)) ?: ""
+                                    }
+                                }
+                                runOnUiThread { result.success(draftBody) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("GET_DRAFT_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
+                    "deleteDraft" -> {
+                        val address = call.argument<String>("address")
+                        if (address == null) {
+                            result.error("INVALID_ARGUMENT", "address required", null)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            try {
+                                val deleted = contentResolver.delete(
+                                    Telephony.Sms.CONTENT_URI,
+                                    "${Telephony.Sms.ADDRESS} = ? AND ${Telephony.Sms.TYPE} = ?",
+                                    arrayOf(address, Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
+                                )
+                                runOnUiThread { result.success(deleted > 0) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("DELETE_DRAFT_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+
                     "deleteMessage" -> {
                         val messageId = call.argument<Any>("messageId")?.toString()?.toLongOrNull()
                         if (messageId == null) {

@@ -8,6 +8,7 @@ import 'package:sms_manager/src/features/conversation/presentation/pages/convers
 import 'package:sms_manager/src/features/compose/presentation/pages/compose_page.dart';
 import 'package:sms_manager/src/features/home/presentation/pages/home_page.dart';
 import 'package:sms_manager/src/features/home/presentation/pages/splash_page.dart';
+import 'package:sms_manager/src/features/search/presentation/pages/search_page.dart';
 
 /// Helper: wraps ConversationPage in its own BlocProvider so each
 /// conversation gets an independent ConversationBloc instance.
@@ -66,6 +67,10 @@ final appRouter = GoRouter(
             final initialBody = state.extra as String?;
             return ComposePage(initialBody: initialBody);
           },
+        ),
+        GoRoute(
+          path: 'search',
+          builder: (context, state) => const SearchPage(),
         ),
       ],
     ),

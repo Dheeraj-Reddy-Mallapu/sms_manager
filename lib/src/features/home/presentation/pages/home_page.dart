@@ -1,11 +1,12 @@
-import 'package:material_ui/material_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
+import 'package:sms_manager/src/core/widgets/timeline_scrollbar.dart';
 import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/features/home/presentation/bloc/home_bloc.dart';
-import 'package:sms_manager/src/core/widgets/timeline_scrollbar.dart';
-import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
+import 'package:sms_manager/src/services/ai_indexing_service.dart';
 import 'package:sms_manager/src/services/native_sms_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -29,6 +30,8 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     // Load from cache first (fast), then background-refresh from native
     context.read<HomeBloc>().add(const LoadThreads(forceSync: false));
+    // Trigger AI indexing check on launch
+    AiIndexingService.instance.triggerIndexing();
   }
 
   /// Returns a time-aware greeting
@@ -169,7 +172,7 @@ class _HomePageState extends State<HomePage> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.search),
-                  onPressed: () {},
+                  onPressed: () => context.push('/home/search'),
                   tooltip: 'Search',
                 ),
                 IconButton(
@@ -192,6 +195,54 @@ class _HomePageState extends State<HomePage> {
                         color: colorScheme.onSurface,
                         fontSize: 20,
                       ),
+                    ),
+                    StreamBuilder<AiProgress>(
+                      stream: AiIndexingService.instance.progressStream,
+                      initialData: AiProgress(false, 0, 0),
+                      builder: (context, snapshot) {
+                        final progress = snapshot.data!;
+                        final isIndexing = progress.isIndexing;
+                        final countText = progress.total > 0 && isIndexing
+                            ? ' (${progress.completed}/${progress.total})'
+                            : '';
+
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isIndexing)
+                                SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colorScheme.primary,
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 14,
+                                  color: Colors.green,
+                                ),
+                              const SizedBox(width: 6),
+                              Text(
+                                isIndexing
+                                    ? 'Local AI indexing in progress$countText...'
+                                    : 'Local AI search ready',
+                                style: TextStyle(
+                                  color: isIndexing
+                                      ? colorScheme.primary
+                                      : Colors.green,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -300,7 +351,7 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        badgeCount > 999 ? '999+' : badgeCount.toString(),
+                        badgeCount > 9999 ? '9999+' : badgeCount.toString(),
                         style: TextStyle(
                           color: isSelected
                               ? colorScheme.primary

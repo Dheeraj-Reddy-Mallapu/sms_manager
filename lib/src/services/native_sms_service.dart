@@ -147,6 +147,21 @@ class NativeSmsService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> fetchAllMessages({
+    int limit = 1000,
+    int offset = 0,
+  }) async {
+    try {
+      final List<dynamic> result = await _queryChannel.invokeMethod(
+        'fetchMessages',
+        {'limit': limit, 'offset': offset},
+      );
+      return result.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      throw Exception('Error fetching all messages: $e');
+    }
+  }
+
   // ── Drafts ───────────────────────────────────────────────────────
 
   static Future<bool> saveDraft(String address, String body) async {

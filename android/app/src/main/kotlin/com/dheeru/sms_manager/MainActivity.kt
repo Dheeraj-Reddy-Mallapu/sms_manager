@@ -172,10 +172,6 @@ class MainActivity : FlutterActivity() {
                         val threadId = call.argument<Any>("threadId")?.toString()?.toLongOrNull()
                         val limit    = call.argument<Any>("limit")?.toString()?.toIntOrNull()  ?: 200
                         val offset   = call.argument<Any>("offset")?.toString()?.toIntOrNull() ?: 0
-                        if (threadId == null) {
-                            result.error("INVALID_ARGUMENT", "threadId required", null)
-                            return@setMethodCallHandler
-                        }
                         Thread {
                             try {
                                 val msgs = SmsFetcher.fetchMessages(this, threadId, limit, offset)

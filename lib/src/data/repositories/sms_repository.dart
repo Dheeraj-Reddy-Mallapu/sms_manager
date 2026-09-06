@@ -4,6 +4,7 @@ import 'package:sms_manager/src/data/local/database_helper.dart';
 import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/data/models/sms_message.dart';
 import 'package:sms_manager/src/services/native_sms_service.dart';
+import 'package:sms_manager/src/services/ai_indexing_service.dart';
 
 class SmsRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
@@ -106,6 +107,29 @@ class SmsRepository {
         if (cached.isNotEmpty) {
           await _db.setLastSyncTimestamp(cached.first.date);
         }
+
+        // ── Background Message Sync for Search ──
+        // Fire and forget to avoid blocking the sync generator
+        Future.microtask(() async {
+          try {
+            int msgOffset = 0;
+            while (true) {
+              final msgsRaw = await NativeSmsService.fetchAllMessages(
+                limit: 500,
+                offset: msgOffset,
+              );
+              if (msgsRaw.isEmpty) break;
+
+              final msgs = msgsRaw.map((e) => SmsMessage.fromMap(e)).toList();
+              await _db.insertMessages(msgs);
+
+              msgOffset += 500;
+            }
+            AiIndexingService.instance.triggerIndexing();
+          } catch (e) {
+            // Log or ignore
+          }
+        });
       } catch (e) {
         // Leave full_sync_completed as false to retry later
       }
@@ -127,6 +151,31 @@ class SmsRepository {
             if (t.date > maxDate) maxDate = t.date;
           }
           await _db.setLastSyncTimestamp(maxDate);
+        }
+
+        // Recovery: if for some reason messages table is empty but threads exist
+        final sampleMsgs = await _db.database.then(
+          (db) => db.rawQuery('SELECT id FROM messages LIMIT 1'),
+        );
+        if (sampleMsgs.isEmpty) {
+          Future.microtask(() async {
+            try {
+              int msgOffset = 0;
+              while (true) {
+                final msgsRaw = await NativeSmsService.fetchAllMessages(
+                  limit: 500,
+                  offset: msgOffset,
+                );
+                if (msgsRaw.isEmpty) break;
+
+                final msgs = msgsRaw.map((e) => SmsMessage.fromMap(e)).toList();
+                await _db.insertMessages(msgs);
+
+                msgOffset += 500;
+              }
+              AiIndexingService.instance.triggerIndexing();
+            } catch (e) {}
+          });
         }
       } catch (e) {
         // Silently fail or log, will retry next time
@@ -168,6 +217,7 @@ class SmsRepository {
 
     if (messages.isNotEmpty) {
       await _db.insertMessages(messages);
+      AiIndexingService.instance.triggerIndexing();
     }
     return messages;
   }
@@ -224,6 +274,7 @@ class SmsRepository {
         subscriptionId: subscriptionId ?? -1,
       );
       await _db.insertMessages([msg]);
+      AiIndexingService.instance.triggerIndexing();
       return true;
     } else {
       return false;

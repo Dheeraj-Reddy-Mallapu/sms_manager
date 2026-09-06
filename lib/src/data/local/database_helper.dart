@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 10,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -58,8 +58,33 @@ CREATE TABLE messages (
   type      INTEGER NOT NULL,
   isStarred INTEGER NOT NULL DEFAULT 0,
   subscriptionId INTEGER NOT NULL DEFAULT -1,
-  status    INTEGER NOT NULL DEFAULT -1
+  status    INTEGER NOT NULL DEFAULT -1,
+  embedding BLOB
 )
+''');
+
+    await db.execute('''
+CREATE VIRTUAL TABLE messages_fts USING fts5(
+  body, 
+  address 
+)
+''');
+
+    await db.execute('''
+CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+END;
+''');
+    await db.execute('''
+CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
+  DELETE FROM messages_fts WHERE rowid = old.id;
+END;
+''');
+    await db.execute('''
+CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
+  DELETE FROM messages_fts WHERE rowid = old.id;
+  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+END;
 ''');
 
     await db.execute('''
@@ -124,6 +149,47 @@ CREATE TABLE IF NOT EXISTS app_metadata (
           'ALTER TABLE messages ADD COLUMN status INTEGER NOT NULL DEFAULT -1',
         );
       } catch (_) {}
+    }
+    if (oldVersion < 10) {
+      try {
+        await db.execute('ALTER TABLE messages ADD COLUMN embedding BLOB');
+      } catch (_) {}
+      try {
+        // Rebuild as standard fts5
+        await db.execute('DROP TABLE IF EXISTS messages_fts');
+        await db.execute('DROP TRIGGER IF EXISTS messages_ai');
+        await db.execute('DROP TRIGGER IF EXISTS messages_ad');
+        await db.execute('DROP TRIGGER IF EXISTS messages_au');
+
+        await db.execute('''
+CREATE VIRTUAL TABLE messages_fts USING fts5(
+  body, 
+  address
+)
+''');
+        await db.execute('''
+INSERT INTO messages_fts(rowid, body, address) 
+SELECT id, body, address FROM messages
+''');
+        await db.execute('''
+CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+END;
+''');
+        await db.execute('''
+CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
+  DELETE FROM messages_fts WHERE rowid = old.id;
+END;
+''');
+        await db.execute('''
+CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
+  DELETE FROM messages_fts WHERE rowid = old.id;
+  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+END;
+''');
+      } catch (e) {
+        print('FTS5 creation failed: $e');
+      }
     }
   }
 
@@ -231,6 +297,20 @@ CREATE TABLE IF NOT EXISTS app_metadata (
     ''';
     final maps = await db.rawQuery(sql, [limit, offset]);
     return maps.map((m) => SmsThread.fromMap(m)).toList();
+  }
+
+  Future<SmsThread?> getThreadById(int threadId) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'threads',
+      where: 'id = ?',
+      whereArgs: [threadId],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return SmsThread.fromMap(maps.first);
+    }
+    return null;
   }
 
   Future<void> markThreadRead(int threadId) async {

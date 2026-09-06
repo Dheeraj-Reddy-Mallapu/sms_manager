@@ -234,26 +234,56 @@ object SmsFetcher {
      * Fetches messages for a single thread. Uses LIMIT/OFFSET in sortOrder —
      * this is safe on content://sms (unlike the OEM-fragmented Threads provider).
      */
-    fun fetchMessages(context: Context, threadId: Long, limit: Int, offset: Int): List<Map<String, Any?>> {
+    fun fetchMessages(context: Context, threadId: Long?, limit: Int, offset: Int): List<Map<String, Any?>> {
         val messages = mutableListOf<Map<String, Any?>>()
 
-        context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI,
-            arrayOf(
-                Telephony.Sms._ID,
-                Telephony.Sms.THREAD_ID,
-                Telephony.Sms.ADDRESS,
-                Telephony.Sms.BODY,
-                Telephony.Sms.DATE,
-                Telephony.Sms.READ,
-                Telephony.Sms.TYPE,
-                Telephony.Sms.SUBSCRIPTION_ID,
-                Telephony.Sms.STATUS
-            ),
-            "${Telephony.Sms.THREAD_ID} = ?",
-            arrayOf(threadId.toString()),
-            "${Telephony.Sms.DATE} DESC LIMIT $limit OFFSET $offset"
-        )?.use { c ->
+        val selection = if (threadId != null) "${Telephony.Sms.THREAD_ID} = ?" else null
+        val selectionArgs = if (threadId != null) arrayOf(threadId.toString()) else null
+
+        val cursor = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val args = android.os.Bundle().apply {
+                if (selection != null) putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+                if (selectionArgs != null) putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+                putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${Telephony.Sms.DATE} DESC")
+                putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
+                putInt(android.content.ContentResolver.QUERY_ARG_OFFSET, offset)
+            }
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Sms._ID,
+                    Telephony.Sms.THREAD_ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE,
+                    Telephony.Sms.READ,
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.SUBSCRIPTION_ID,
+                    Telephony.Sms.STATUS
+                ),
+                args, null
+            )
+        } else {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Sms._ID,
+                    Telephony.Sms.THREAD_ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE,
+                    Telephony.Sms.READ,
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.SUBSCRIPTION_ID,
+                    Telephony.Sms.STATUS
+                ),
+                selection,
+                selectionArgs,
+                "${Telephony.Sms.DATE} DESC LIMIT $limit OFFSET $offset"
+            )
+        }
+
+        cursor?.use { c ->
             Log.d(TAG, "fetchMessages(thread=$threadId): ${c.count} rows")
             val idIdx       = c.getColumnIndexOrThrow(Telephony.Sms._ID)
             val threadIdIdx = c.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)

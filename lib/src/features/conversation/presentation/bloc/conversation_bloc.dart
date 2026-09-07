@@ -348,9 +348,13 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
         forceSync: true,
       );
 
-      // Prepend older messages (they come DESC from native, reverse to ASC)
-      final olderAsc = older.reversed.toList();
-      final merged = [...olderAsc, ...current.messages];
+      // older messages come from DB in DESC order (newest-of-batch first).
+      // current.messages is also DESC (newest first).
+      // To keep DESC: put current (newer) first, then older at the end.
+      // De-dupe by id in case of overlap.
+      final existingIds = current.messages.map((m) => m.id).toSet();
+      final newOlder = older.where((m) => !existingIds.contains(m.id)).toList();
+      final merged = [...current.messages, ...newOlder];
 
       emit(
         current.copyWith(
@@ -579,8 +583,8 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     return descList;
   }
 
-  /// Merges a fresh page of newest messages with the currently loaded older messages
-  /// so that we don't lose older messages if the user scrolled up.
+  /// Merges a fresh page of newest messages with the currently loaded older messages.
+  /// Returns DESC order (newest first) for reverse:true ListView.
   List<SmsMessage> _mergeMessages(
     List<SmsMessage> currentList,
     List<SmsMessage> freshNewestList,
@@ -589,7 +593,8 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     final olderKeep = currentList
         .where((m) => !freshIds.contains(m.id))
         .toList();
-    return [...olderKeep, ...freshNewestList];
+    // DESC: fresh (newer) first, then older kept at end
+    return [...freshNewestList, ...olderKeep];
   }
 
   // ── Database System Changes ────────────────────────────────────────────

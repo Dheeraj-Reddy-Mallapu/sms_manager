@@ -18,15 +18,20 @@ class TimelineScrollbar extends StatefulWidget {
   final ScrollController controller;
   final Widget child;
 
-  /// Given the scroll fraction (0.0 = top, 1.0 = bottom), return the label
-  /// to show in the floating bubble next to the thumb.
+  /// Given the scroll fraction (0.0 = top/oldest, 1.0 = bottom/newest when reversed=true),
+  /// return the label to show in the floating bubble next to the thumb.
   final String Function(double fraction) labelForFraction;
+
+  /// Set true when wrapping a reverse:true ListView. Inverts thumb position and
+  /// drag direction so the thumb sits at the BOTTOM when viewing newest content.
+  final bool reversed;
 
   const TimelineScrollbar({
     super.key,
     required this.controller,
     required this.child,
     required this.labelForFraction,
+    this.reversed = false,
   });
 
   @override
@@ -49,6 +54,8 @@ class _TimelineScrollbarState extends State<TimelineScrollbar>
       duration: const Duration(milliseconds: 200),
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    // For a reversed list, start thumb at bottom (fraction=1.0)
+    _fraction = widget.reversed ? 1.0 : 0.0;
     widget.controller.addListener(_onScroll);
   }
 
@@ -71,8 +78,12 @@ class _TimelineScrollbarState extends State<TimelineScrollbar>
   void _onScroll() {
     final pos = widget.controller.position;
     if (pos.maxScrollExtent <= 0) return;
+    final raw = (pos.pixels / pos.maxScrollExtent).clamp(0.0, 1.0);
+    // For reversed lists: pixels=0 is the bottom (newest), so invert fraction
+    // so the thumb sits at bottom (1.0) when viewing newest content.
+    final displayFraction = widget.reversed ? 1.0 - raw : raw;
     setState(() {
-      _fraction = (pos.pixels / pos.maxScrollExtent).clamp(0.0, 1.0);
+      _fraction = displayFraction;
       _isScrolling = true;
     });
     _fadeCtrl.forward();
@@ -89,16 +100,18 @@ class _TimelineScrollbarState extends State<TimelineScrollbar>
   void _onDragUpdate(DragUpdateDetails details, BoxConstraints constraints) {
     final trackHeight = constraints.maxHeight;
     final dy = details.localPosition.dy.clamp(0.0, trackHeight);
+    final displayFraction = (dy / trackHeight).clamp(0.0, 1.0);
     setState(() {
-      _fraction = (dy / trackHeight).clamp(0.0, 1.0);
+      _fraction = displayFraction;
       _isDragging = true;
     });
     _fadeCtrl.forward();
 
-    // Jump scroll to the new position
+    // Jump scroll: for reversed lists, fraction=1 (bottom of track) = pixels=0 (newest)
     final pos = widget.controller.position;
     if (pos.maxScrollExtent > 0) {
-      widget.controller.jumpTo(_fraction * pos.maxScrollExtent);
+      final scrollFraction = widget.reversed ? 1.0 - displayFraction : displayFraction;
+      widget.controller.jumpTo(scrollFraction * pos.maxScrollExtent);
     }
   }
 

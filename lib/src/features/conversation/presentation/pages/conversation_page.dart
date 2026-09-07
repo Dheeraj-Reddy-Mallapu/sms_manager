@@ -61,6 +61,14 @@ class _ConversationPageState extends State<ConversationPage> {
         highlightMessageId: widget.highlightMessageId,
       ),
     );
+    // Ensure we always start at the bottom (newest messages) after first frame.
+    // reverse:true should do this automatically, but an explicit jump handles edge cases.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients &&
+          widget.highlightMessageId == null) {
+        _scrollController.jumpTo(0.0);
+      }
+    });
   }
 
   @override
@@ -501,12 +509,12 @@ class _ConversationPageState extends State<ConversationPage> {
 
     return TimelineScrollbar(
       controller: _scrollController,
-      // reverse:true means fraction=0 → pixels=0 → bottom of screen (newest, index 0).
-      // fraction=1 → pixels=max → top of screen (oldest, index length-1).
-      // So array index = fraction * (length-1) maps label correctly.
+      reversed: true,
+      // The scrollbar gives us displayFraction where 1.0=bottom=newest (index 0).
+      // So array index = (1.0 - fraction) * (length-1).
       labelForFraction: (fraction) {
         if (messages.isEmpty) return '';
-        final idx = (fraction * (messages.length - 1)).round().clamp(
+        final idx = ((1.0 - fraction) * (messages.length - 1)).round().clamp(
           0,
           messages.length - 1,
         );

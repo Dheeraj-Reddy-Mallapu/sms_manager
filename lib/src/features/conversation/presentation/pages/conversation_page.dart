@@ -124,22 +124,67 @@ class _ConversationPageState extends State<ConversationPage> {
     }
   }
 
-  /// Scrolls to a highlighted message. Retries up to 20 frames because the
-  /// ListView is virtualized — the item may not be built on the first frame.
+  /// Scrolls to a highlighted message from a search result tap.
+  /// Two-phase:
+  ///   1. Rough scroll: jump to an estimated pixel offset based on message index
+  ///      (forces the virtualized ListView to build items around the target).
+  ///   2. Fine scroll: once the item's GlobalKey is attached, center it exactly.
   void _scrollToHighlight(int messageId, {int attempt = 0}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _messageKeys[messageId];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: const Duration(milliseconds: 400),
-          alignment: 0.5,
-          curve: Curves.easeInOut,
-        );
-      } else if (attempt < 20) {
-        // Item not built yet — retry on the next frame
-        _scrollToHighlight(messageId, attempt: attempt + 1);
+      if (!mounted) return;
+      if (!_scrollController.hasClients) {
+        if (attempt < 40) _scrollToHighlight(messageId, attempt: attempt + 1);
+        return;
       }
+
+      final key = _messageKeys[messageId];
+      final ctx = key?.currentContext;
+
+      if (ctx == null) {
+        // Item not built yet. On first attempts, do a rough positional scroll
+        // to force the virtualized list to render items near the target.
+        if (attempt == 0) {
+          // Find message index in the current state to estimate offset
+          final bstate = context.read<ConversationBloc>().state;
+          if (bstate is ConversationLoaded) {
+            final idx = bstate.messages.indexWhere((m) => m.id == messageId);
+            if (idx >= 0) {
+              // Estimate: each message ~60px average. Scroll partway there.
+              final total = bstate.messages.length;
+              // In DESC list, idx=0 is newest (pixels=0), idx=total-1 is oldest (maxExtent).
+              final fraction = idx / (total > 1 ? total - 1 : 1);
+              final target = fraction * _scrollController.position.maxScrollExtent;
+              _scrollController.jumpTo(target.clamp(0.0, _scrollController.position.maxScrollExtent));
+            }
+          }
+        }
+        if (attempt < 40) _scrollToHighlight(messageId, attempt: attempt + 1);
+        return;
+      }
+
+      // Item is built — fine-tune to center it in the viewport
+      final renderBox = ctx.findRenderObject() as RenderBox?;
+      if (renderBox == null) {
+        if (attempt < 40) _scrollToHighlight(messageId, attempt: attempt + 1);
+        return;
+      }
+
+      final scrollRenderBox = _scrollController
+          .position.context.storageContext
+          .findRenderObject() as RenderBox?;
+      if (scrollRenderBox == null) return;
+
+      final itemOffset = renderBox.localToGlobal(Offset.zero, ancestor: scrollRenderBox);
+      final viewportHeight = _scrollController.position.viewportDimension;
+      final currentPixels = _scrollController.position.pixels;
+      final targetPixels = (currentPixels + itemOffset.dy - (viewportHeight / 2) + (renderBox.size.height / 2))
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+
+      _scrollController.animateTo(
+        targetPixels,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
     });
   }
 
@@ -192,16 +237,14 @@ class _ConversationPageState extends State<ConversationPage> {
             );
           }
 
-            // Auto-scroll logic is no longer needed because reverse: true 
-            // natively pins new messages to the bottom.
+          // Scroll to highlighted message (from search result tap)
+          if (state.highlightMessageId != null && !_didHighlight) {
+            _didHighlight = true;
+            _scrollToHighlight(state.highlightMessageId!);
+          }
         }
       },
       builder: (context, state) {
-        if (state is ConversationLoaded && state.highlightMessageId != null && !_didHighlight) {
-          _didHighlight = true;
-          _scrollToHighlight(state.highlightMessageId!);
-        }
-
         final isMultiSelect =
             state is ConversationLoaded && state.selectedIds.isNotEmpty;
 

@@ -30,8 +30,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     // Load from cache first (fast), then background-refresh from native
     context.read<HomeBloc>().add(const LoadThreads(forceSync: false));
-    // Trigger AI indexing check on launch
-    AiIndexingService.instance.triggerIndexing();
+    // AI indexing is triggered automatically once SMS fetch completes (via notifySmsFetchComplete)
   }
 
   /// Returns a time-aware greeting
@@ -201,40 +200,63 @@ class _HomePageState extends State<HomePage> {
                       initialData: AiProgress(false, 0, 0),
                       builder: (context, snapshot) {
                         final progress = snapshot.data!;
+                        final phase = progress.fetchPhase;
                         final isIndexing = progress.isIndexing;
-                        final countText = progress.total > 0 && isIndexing
-                            ? ' (${progress.completed}/${progress.total})'
-                            : '';
+
+                        // Determine what to show based on the phase
+                        String label;
+                        IconData icon;
+                        Color color;
+                        bool showSpinner;
+
+                        if (phase == SmsFetchPhase.fetchingMessages) {
+                          label = 'Loading messages...';
+                          icon = Icons.downloading_rounded;
+                          color = colorScheme.tertiary;
+                          showSpinner = true;
+                        } else if (isIndexing) {
+                          final pct = progress.total > 0
+                              ? ' (${progress.completed}/${progress.total})'
+                              : '';
+                          label = 'AI indexing$pct...';
+                          icon = Icons.auto_awesome;
+                          color = colorScheme.primary;
+                          showSpinner = true;
+                        } else if (phase == SmsFetchPhase.ready || progress.completed > 0) {
+                          label = 'Local AI search ready';
+                          icon = Icons.check_circle;
+                          color = Colors.green;
+                          showSpinner = false;
+                        } else {
+                          // unknown phase on subsequent launches: just show ready if we have embeddings
+                          label = progress.total > 0
+                              ? 'AI search ready (${progress.completed}/${progress.total})'
+                              : 'Local AI search ready';
+                          icon = Icons.check_circle;
+                          color = Colors.green;
+                          showSpinner = false;
+                        }
 
                         return Padding(
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (isIndexing)
-                                SizedBox(
-                                  width: 10,
-                                  height: 10,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colorScheme.primary,
-                                  ),
-                                )
-                              else
-                                Icon(
-                                  Icons.check_circle,
-                                  size: 14,
-                                  color: Colors.green,
-                                ),
+                              showSpinner
+                                  ? SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: color,
+                                      ),
+                                    )
+                                  : Icon(icon, size: 14, color: color),
                               const SizedBox(width: 6),
                               Text(
-                                isIndexing
-                                    ? 'Local AI indexing in progress$countText...'
-                                    : 'Local AI search ready',
+                                label,
                                 style: TextStyle(
-                                  color: isIndexing
-                                      ? colorScheme.primary
-                                      : Colors.green,
+                                  color: color,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
                                 ),

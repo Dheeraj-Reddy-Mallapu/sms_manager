@@ -9,13 +9,13 @@ void main() {
   final inputs = interpreter.getInputTensors();
   for (var i = 0; i < inputs.length; i++) {
     final tensor = inputs[i];
-    print('Index \$i: \${tensor.name} (type: \${tensor.type}, shape: \${tensor.shape})');
+    print('Index $i: ${tensor.name} (type: ${tensor.type}, shape: ${tensor.shape})');
   }
 
   print('--- OUTPUT TENSORS ---');
   final outputs = interpreter.getOutputTensors();
   for (var i = 0; i < outputs.length; i++) {
     final tensor = outputs[i];
-    print('Index \$i: \${tensor.name} (type: \${tensor.type}, shape: \${tensor.shape})');
+    print('Index $i: ${tensor.name} (type: ${tensor.type}, shape: ${tensor.shape})');
   }
 }

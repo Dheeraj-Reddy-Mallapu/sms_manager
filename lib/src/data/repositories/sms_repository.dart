@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:sqflite/sqflite.dart';
 import 'package:sms_manager/src/data/local/database_helper.dart';
 import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/data/models/sms_message.dart';
@@ -112,6 +113,7 @@ class SmsRepository {
         // Fire and forget to avoid blocking the sync generator
         Future.microtask(() async {
           try {
+            AiIndexingService.instance.notifySmsFetchStarted();
             int msgOffset = 0;
             while (true) {
               final msgsRaw = await NativeSmsService.fetchAllMessages(
@@ -125,9 +127,10 @@ class SmsRepository {
 
               msgOffset += 500;
             }
-            AiIndexingService.instance.triggerIndexing();
+            // Only start AI after ALL messages are in DB
+            AiIndexingService.instance.notifySmsFetchComplete();
           } catch (e) {
-            // Log or ignore
+            // Log or ignore — next launch recovery will retry
           }
         });
       } catch (e) {
@@ -153,13 +156,18 @@ class SmsRepository {
           await _db.setLastSyncTimestamp(maxDate);
         }
 
-        // Recovery: if for some reason messages table is empty but threads exist
-        final sampleMsgs = await _db.database.then(
-          (db) => db.rawQuery('SELECT id FROM messages LIMIT 1'),
-        );
-        if (sampleMsgs.isEmpty) {
+        // Recovery: if messages were partially synced due to OS interruption or bugs
+        final msgCount = Sqflite.firstIntValue(await _db.database.then(
+          (db) => db.rawQuery('SELECT COUNT(*) FROM messages'),
+        )) ?? 0;
+        final threadCount = Sqflite.firstIntValue(await _db.database.then(
+          (db) => db.rawQuery('SELECT COUNT(*) FROM threads'),
+        )) ?? 0;
+        
+        if (msgCount < threadCount) {
           Future.microtask(() async {
             try {
+              AiIndexingService.instance.notifySmsFetchStarted();
               int msgOffset = 0;
               while (true) {
                 final msgsRaw = await NativeSmsService.fetchAllMessages(
@@ -173,8 +181,10 @@ class SmsRepository {
 
                 msgOffset += 500;
               }
-              AiIndexingService.instance.triggerIndexing();
-            } catch (e) {}
+              AiIndexingService.instance.notifySmsFetchComplete();
+            } catch (e) {
+              // Ignore
+            }
           });
         }
       } catch (e) {

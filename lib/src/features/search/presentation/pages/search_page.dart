@@ -283,7 +283,7 @@ class _SearchPageState extends State<SearchPage> {
               borderRadius: BorderRadius.circular(16),
               onTap: () {
                 context.push(
-                  '/home/conversation/${msg.threadId}',
+                  '/home/conversation/${msg.threadId}?messageId=${msg.id}',
                   extra: thread,
                 );
               },

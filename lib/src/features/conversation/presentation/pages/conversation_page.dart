@@ -22,6 +22,7 @@ class ConversationPage extends StatefulWidget {
   final String? contactName;
   final String? contactPhotoUri;
   final String? initialBody;
+  final int? highlightMessageId;
 
   const ConversationPage({
     super.key,
@@ -30,6 +31,7 @@ class ConversationPage extends StatefulWidget {
     this.contactName,
     this.contactPhotoUri,
     this.initialBody,
+    this.highlightMessageId,
   });
 
   @override
@@ -38,8 +40,10 @@ class ConversationPage extends StatefulWidget {
 
 class _ConversationPageState extends State<ConversationPage> {
   final _scrollController = ScrollController();
+  final Map<int, GlobalKey> _messageKeys = {};
   bool _showScrollToBottom = false;
   bool _isSearching = false;
+  bool _didHighlight = false;
 
   // For read-tracking: set of message IDs currently visible
   Timer? _readDebounce;
@@ -51,7 +55,11 @@ class _ConversationPageState extends State<ConversationPage> {
     _scrollController.addListener(_onScroll);
     final address = widget.address ?? '';
     context.read<ConversationBloc>().add(
-      LoadMessages(widget.threadId, address: address),
+      LoadMessages(
+        widget.threadId, 
+        address: address, 
+        highlightMessageId: widget.highlightMessageId,
+      ),
     );
   }
 
@@ -73,15 +81,18 @@ class _ConversationPageState extends State<ConversationPage> {
 
   void _onScroll() {
     final pos = _scrollController.position;
-    final atBottom = pos.pixels >= pos.maxScrollExtent - 100;
-    if (_showScrollToBottom == atBottom) {
+    // In reverse:true, pixels=0 is the BOTTOM of screen (newest messages).
+    // pixels=maxScrollExtent is the TOP of screen (oldest messages).
+    final atBottom = pos.pixels <= 100;
+    if (_showScrollToBottom != !atBottom) {
       setState(() => _showScrollToBottom = !atBottom);
     }
 
-    // Load more when user scrolls near the top
-    if (pos.pixels <= 150) {
+    // Load more older messages when user scrolls near the TOP (maxScrollExtent)
+    if (pos.hasContentDimensions && pos.pixels >= pos.maxScrollExtent - 150) {
       final bloc = context.read<ConversationBloc>();
-      if (bloc.state is ConversationLoaded) {
+      final bstate = bloc.state;
+      if (bstate is ConversationLoaded && bstate.hasMore && !bstate.isLoadingMore) {
         bloc.add(LoadMoreMessages(widget.threadId));
       }
     }
@@ -91,17 +102,37 @@ class _ConversationPageState extends State<ConversationPage> {
     _readDebounce = Timer(const Duration(milliseconds: 400), _markVisibleRead);
   }
 
+  // In reverse:true, "bottom" (newest) = pixels 0.0 = minScrollExtent
   void _scrollToBottom({bool animated = true}) {
     if (!_scrollController.hasClients) return;
     if (animated) {
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0.0,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
     } else {
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      _scrollController.jumpTo(0.0);
     }
+  }
+
+  /// Scrolls to a highlighted message. Retries up to 20 frames because the
+  /// ListView is virtualized — the item may not be built on the first frame.
+  void _scrollToHighlight(int messageId, {int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _messageKeys[messageId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          duration: const Duration(milliseconds: 400),
+          alignment: 0.5,
+          curve: Curves.easeInOut,
+        );
+      } else if (attempt < 20) {
+        // Item not built yet — retry on the next frame
+        _scrollToHighlight(messageId, attempt: attempt + 1);
+      }
+    });
   }
 
   void _markVisibleRead() {
@@ -153,23 +184,16 @@ class _ConversationPageState extends State<ConversationPage> {
             );
           }
 
-          // Auto-scroll to bottom when a new message arrives and user is at bottom
-          if (!_showScrollToBottom) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollController.hasClients) {
-                _scrollToBottom();
-              }
-            });
-          }
-          // On initial load, scroll to bottom
-          if (state.messages.isNotEmpty && !_scrollController.hasClients) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _scrollToBottom(animated: false);
-            });
-          }
+            // Auto-scroll logic is no longer needed because reverse: true 
+            // natively pins new messages to the bottom.
         }
       },
       builder: (context, state) {
+        if (state is ConversationLoaded && state.highlightMessageId != null && !_didHighlight) {
+          _didHighlight = true;
+          _scrollToHighlight(state.highlightMessageId!);
+        }
+
         final isMultiSelect =
             state is ConversationLoaded && state.selectedIds.isNotEmpty;
 
@@ -464,9 +488,11 @@ class _ConversationPageState extends State<ConversationPage> {
       );
     }
 
-    // Find index of first unread incoming message
+    // In DESC list: oldest unread is at the HIGHEST index (visually top of screen).
+    // We scan backwards to find the last unread — this is where the separator
+    // should appear (just below visually, i.e. the highest-index unread).
     int? firstUnreadIdx;
-    for (int i = 0; i < messages.length; i++) {
+    for (int i = messages.length - 1; i >= 0; i--) {
       if (!messages[i].read && !messages[i].isOutgoing) {
         firstUnreadIdx = i;
         break;
@@ -475,11 +501,12 @@ class _ConversationPageState extends State<ConversationPage> {
 
     return TimelineScrollbar(
       controller: _scrollController,
+      // reverse:true means fraction=0 → pixels=0 → bottom of screen (newest, index 0).
+      // fraction=1 → pixels=max → top of screen (oldest, index length-1).
+      // So array index = fraction * (length-1) maps label correctly.
       labelForFraction: (fraction) {
         if (messages.isEmpty) return '';
-        // Conversation is reversed: bottom is newest (index length-1).
-        // Fraction 0.0 is top (oldest), 1.0 is bottom (newest).
-        final idx = (fraction * messages.length).floor().clamp(
+        final idx = (fraction * (messages.length - 1)).round().clamp(
           0,
           messages.length - 1,
         );
@@ -488,11 +515,12 @@ class _ConversationPageState extends State<ConversationPage> {
       child: ListView.builder(
         controller: _scrollController,
         physics: const BouncingScrollPhysics(),
+        reverse: true,
         padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
         itemCount: messages.length + (state.isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
-          // Spinner at top while loading older messages
-          if (state.isLoadingMore && index == 0) {
+          // Spinner at the top of screen = highest index in reverse list
+          if (state.isLoadingMore && index == messages.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(
@@ -505,48 +533,47 @@ class _ConversationPageState extends State<ConversationPage> {
             );
           }
 
-          final msgIndex = state.isLoadingMore ? index - 1 : index;
+          final msgIndex = index;
           final message = messages[msgIndex];
 
-          // Determine grouping position
-          final prev = msgIndex > 0 ? messages[msgIndex - 1] : null;
-          final next = msgIndex < messages.length - 1
-              ? messages[msgIndex + 1]
-              : null;
+          // In DESC list: index+1 = older message, index-1 = newer message
+          final olderMsg = msgIndex < messages.length - 1 ? messages[msgIndex + 1] : null;
+          final newerMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
 
-          final sameAsPrev =
-              prev != null &&
-              prev.isOutgoing == message.isOutgoing &&
-              message.date - prev.date < 60000;
-          final sameAsNext =
-              next != null &&
-              next.isOutgoing == message.isOutgoing &&
-              next.date - message.date < 60000;
+          final sameAsOlder = olderMsg != null &&
+              olderMsg.isOutgoing == message.isOutgoing &&
+              message.date - olderMsg.date < 60000;
+          final sameAsNewer = newerMsg != null &&
+              newerMsg.isOutgoing == message.isOutgoing &&
+              newerMsg.date - message.date < 60000;
 
           BubblePosition pos;
-          if (!sameAsPrev && !sameAsNext) {
+          if (!sameAsOlder && !sameAsNewer) {
             pos = BubblePosition.solo;
-          } else if (!sameAsPrev && sameAsNext) {
+          } else if (!sameAsOlder && sameAsNewer) {
             pos = BubblePosition.first;
-          } else if (sameAsPrev && sameAsNext) {
-            pos = BubblePosition.middle;
-          } else {
+          } else if (sameAsOlder && !sameAsNewer) {
             pos = BubblePosition.last;
+          } else {
+            pos = BubblePosition.middle;
           }
 
-          // Date separator when day changes
+          // Show date separator when day changes; olderMsg is visually above on screen
           final showDate =
-              prev == null ||
+              olderMsg == null ||
               !_sameDay(
-                DateTime.fromMillisecondsSinceEpoch(prev.date),
+                DateTime.fromMillisecondsSinceEpoch(olderMsg.date),
                 DateTime.fromMillisecondsSinceEpoch(message.date),
               );
 
-          // Unread separator
+          // Show unread separator above the oldest unread block
           final showUnreadSep =
               firstUnreadIdx != null && msgIndex == firstUnreadIdx;
+              
+          final isHighlighted = state.highlightMessageId == message.id;
 
           return Column(
+            key: _messageKeys.putIfAbsent(message.id, () => GlobalKey()),
             mainAxisSize: MainAxisSize.min,
             children: [
               if (showDate)
@@ -558,6 +585,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 message: message,
                 position: pos,
                 isSelected: state.selectedIds.contains(message.id),
+                isHighlighted: isHighlighted,
                 searchQuery: state.searchQuery,
                 onShowMenu: (msg) => _showContextMenu(context, msg),
                 onTap: state.selectedIds.isNotEmpty
@@ -665,7 +693,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 onPressed: () {
                   Navigator.pop(context); // close dialog
                   context.read<ConversationBloc>().add(
-                    const DeleteConversation(),
+                    DeleteConversation(widget.threadId),
                   );
                   context.pop(); // exit conversation page
                 },

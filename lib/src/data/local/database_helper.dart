@@ -64,7 +64,8 @@ CREATE TABLE messages (
 ''');
 
     await db.execute('''
-CREATE VIRTUAL TABLE messages_fts USING fts5(
+CREATE VIRTUAL TABLE messages_fts USING fts4(
+  content='messages',
   body, 
   address 
 )
@@ -72,18 +73,18 @@ CREATE VIRTUAL TABLE messages_fts USING fts5(
 
     await db.execute('''
 CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
-  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+  INSERT INTO messages_fts(docid, body, address) VALUES (new.id, new.body, new.address);
 END;
 ''');
     await db.execute('''
 CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
-  DELETE FROM messages_fts WHERE rowid = old.id;
+  DELETE FROM messages_fts WHERE docid = old.id;
 END;
 ''');
     await db.execute('''
 CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
-  DELETE FROM messages_fts WHERE rowid = old.id;
-  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+  DELETE FROM messages_fts WHERE docid = old.id;
+  INSERT INTO messages_fts(docid, body, address) VALUES (new.id, new.body, new.address);
 END;
 ''');
 
@@ -155,36 +156,37 @@ CREATE TABLE IF NOT EXISTS app_metadata (
         await db.execute('ALTER TABLE messages ADD COLUMN embedding BLOB');
       } catch (_) {}
       try {
-        // Rebuild as standard fts5
+        // Rebuild as fts4 because some OEMs lack fts5
         await db.execute('DROP TABLE IF EXISTS messages_fts');
         await db.execute('DROP TRIGGER IF EXISTS messages_ai');
         await db.execute('DROP TRIGGER IF EXISTS messages_ad');
         await db.execute('DROP TRIGGER IF EXISTS messages_au');
 
         await db.execute('''
-CREATE VIRTUAL TABLE messages_fts USING fts5(
+CREATE VIRTUAL TABLE messages_fts USING fts4(
+  content='messages',
   body, 
   address
 )
 ''');
         await db.execute('''
-INSERT INTO messages_fts(rowid, body, address) 
+INSERT INTO messages_fts(docid, body, address) 
 SELECT id, body, address FROM messages
 ''');
         await db.execute('''
 CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
-  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+  INSERT INTO messages_fts(docid, body, address) VALUES (new.id, new.body, new.address);
 END;
 ''');
         await db.execute('''
 CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
-  DELETE FROM messages_fts WHERE rowid = old.id;
+  DELETE FROM messages_fts WHERE docid = old.id;
 END;
 ''');
         await db.execute('''
 CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
-  DELETE FROM messages_fts WHERE rowid = old.id;
-  INSERT INTO messages_fts(rowid, body, address) VALUES (new.id, new.body, new.address);
+  DELETE FROM messages_fts WHERE docid = old.id;
+  INSERT INTO messages_fts(docid, body, address) VALUES (new.id, new.body, new.address);
 END;
 ''');
       } catch (e) {

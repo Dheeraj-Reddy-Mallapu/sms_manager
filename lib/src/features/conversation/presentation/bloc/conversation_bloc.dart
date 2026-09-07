@@ -16,9 +16,10 @@ abstract class ConversationEvent extends Equatable {
 class LoadMessages extends ConversationEvent {
   final int threadId;
   final String address;
-  const LoadMessages(this.threadId, {this.address = ''});
+  final int? highlightMessageId;
+  const LoadMessages(this.threadId, {this.address = '', this.highlightMessageId});
   @override
-  List<Object?> get props => [threadId, address];
+  List<Object?> get props => [threadId, address, highlightMessageId];
 }
 
 class LoadMoreMessages extends ConversationEvent {
@@ -81,14 +82,14 @@ class ClearSearch extends ConversationEvent {
 
 class MarkVisibleAsRead extends ConversationEvent {
   final int threadId;
-  final List<int> visibleMessageIds;
-  const MarkVisibleAsRead(this.threadId, this.visibleMessageIds);
+  final List<int> messageIds;
+  const MarkVisibleAsRead(this.threadId, this.messageIds);
   @override
-  List<Object?> get props => [threadId, visibleMessageIds];
+  List<Object?> get props => [threadId, messageIds];
 }
 
 class IncomingMessageReceived extends ConversationEvent {
-  final Map<String, dynamic> data;
+  final Map<dynamic, dynamic> data;
   const IncomingMessageReceived(this.data);
   @override
   List<Object?> get props => [data];
@@ -99,14 +100,17 @@ class SystemMessagesChanged extends ConversationEvent {
 }
 
 class DeleteConversation extends ConversationEvent {
-  const DeleteConversation();
+  final int threadId;
+  const DeleteConversation(this.threadId);
+  @override
+  List<Object?> get props => [threadId];
 }
 
 class SelectSim extends ConversationEvent {
-  final int? subscriptionId;
-  const SelectSim(this.subscriptionId);
+  final int simId;
+  const SelectSim(this.simId);
   @override
-  List<Object?> get props => [subscriptionId];
+  List<Object?> get props => [simId];
 }
 
 // ── States ───────────────────────────────────────────────────────────────────
@@ -121,46 +125,37 @@ class ConversationInitial extends ConversationState {}
 
 class ConversationLoading extends ConversationState {}
 
-class ConversationError extends ConversationState {
-  final String message;
-  const ConversationError(this.message);
-  @override
-  List<Object?> get props => [message];
-}
-
 class ConversationLoaded extends ConversationState {
-  /// Messages in display order: oldest first (index 0) → newest last.
   final List<SmsMessage> messages;
   final int threadId;
   final String address;
-
-  final bool hasMore; // older messages exist in Telephony provider
-  final bool isLoadingMore; // spinner at top while fetching older page
-  final bool isSending; // optimistic: send in progress
-
-  final Set<int> selectedIds; // non-empty → multi-select mode
-  final String searchQuery; // non-empty → search mode
-  final Set<int> alreadyReadIds; // ids we've already sent markAsRead for
-
-  final List<Map<String, dynamic>> simInfoList; // List of active SIMs
-  final int?
-  selectedSimId; // currently selected subscriptionId (null = system default)
+  final bool hasMore;
+  final bool isLoadingMore;
+  final bool isSending;
+  final Set<int> selectedIds;
+  final bool isSearchActive;
+  final String searchQuery;
+  final int? selectedSimId;
+  final int? highlightMessageId;
+  final Set<int> alreadyReadIds;
+  final List<Map<String, dynamic>> simInfoList;
 
   const ConversationLoaded({
     required this.messages,
     required this.threadId,
     required this.address,
-    this.hasMore = false,
+    this.hasMore = true,
     this.isLoadingMore = false,
     this.isSending = false,
     this.selectedIds = const {},
+    this.isSearchActive = false,
     this.searchQuery = '',
+    this.selectedSimId,
+    this.highlightMessageId,
     this.alreadyReadIds = const {},
     this.simInfoList = const [],
-    this.selectedSimId,
   });
 
-  /// Messages filtered by search query (empty = all)
   List<SmsMessage> get displayMessages {
     if (searchQuery.isEmpty) return messages;
     final q = searchQuery.toLowerCase();
@@ -175,45 +170,61 @@ class ConversationLoaded extends ConversationState {
     bool? isLoadingMore,
     bool? isSending,
     Set<int>? selectedIds,
+    bool? isSearchActive,
     String? searchQuery,
+    int? selectedSimId,
+    int? highlightMessageId,
     Set<int>? alreadyReadIds,
     List<Map<String, dynamic>>? simInfoList,
-    int? selectedSimId,
-  }) => ConversationLoaded(
-    messages: messages ?? this.messages,
-    threadId: threadId,
-    address: address,
-    hasMore: hasMore ?? this.hasMore,
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-    isSending: isSending ?? this.isSending,
-    selectedIds: selectedIds ?? this.selectedIds,
-    searchQuery: searchQuery ?? this.searchQuery,
-    alreadyReadIds: alreadyReadIds ?? this.alreadyReadIds,
-    simInfoList: simInfoList ?? this.simInfoList,
-    selectedSimId: selectedSimId ?? this.selectedSimId,
-  );
+  }) {
+    return ConversationLoaded(
+      messages: messages ?? this.messages,
+      threadId: threadId,
+      address: address,
+      hasMore: hasMore ?? this.hasMore,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      isSending: isSending ?? this.isSending,
+      selectedIds: selectedIds ?? this.selectedIds,
+      isSearchActive: isSearchActive ?? this.isSearchActive,
+      searchQuery: searchQuery ?? this.searchQuery,
+      selectedSimId: selectedSimId ?? this.selectedSimId,
+      highlightMessageId: highlightMessageId ?? this.highlightMessageId,
+      alreadyReadIds: alreadyReadIds ?? this.alreadyReadIds,
+      simInfoList: simInfoList ?? this.simInfoList,
+    );
+  }
 
   @override
   List<Object?> get props => [
-    messages,
-    threadId,
-    hasMore,
-    isLoadingMore,
-    isSending,
-    selectedIds,
-    searchQuery,
-    alreadyReadIds,
-    simInfoList,
-    selectedSimId,
-  ];
+        messages,
+        threadId,
+        address,
+        hasMore,
+        isLoadingMore,
+        isSending,
+        selectedIds,
+        isSearchActive,
+        searchQuery,
+        selectedSimId,
+        highlightMessageId,
+        alreadyReadIds,
+        simInfoList,
+      ];
+}
+
+class ConversationError extends ConversationState {
+  final String message;
+  const ConversationError(this.message);
+  @override
+  List<Object?> get props => [message];
 }
 
 // ── BLoC ─────────────────────────────────────────────────────────────────────
 
 class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
   final SmsRepository repository;
-  StreamSubscription<Map<String, dynamic>>? _incomingSubscription;
-  StreamSubscription<void>? _systemChangesSubscription;
+  StreamSubscription? _incomingSubscription;
+  StreamSubscription? _systemChangesSubscription;
   DateTime? _lastSystemChange;
 
   static const _pageSize = 50;
@@ -257,16 +268,18 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     }, onError: (_) {});
 
     try {
-      // Fetch newest 50 from cache (fast), then refresh from native
+      final limit = event.highlightMessageId != null ? 5000 : _pageSize;
+      
+      // Fetch newest 50 (or 5000) from cache (fast), then refresh from native
       final cached = await repository.getMessages(
         event.threadId,
-        limit: _pageSize,
+        limit: limit,
         offset: 0,
       );
       final displayList = _toDisplayOrder(cached);
 
       // hasMore: if we got a full page, assume there are more
-      final hasMore = cached.length >= _pageSize;
+      final hasMore = cached.length >= limit;
 
       emit(
         ConversationLoaded(
@@ -274,6 +287,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
           threadId: event.threadId,
           address: event.address,
           hasMore: hasMore,
+          highlightMessageId: event.highlightMessageId,
         ),
       );
 
@@ -510,7 +524,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     if (current is! ConversationLoaded) return;
 
     // Only mark IDs we haven't marked yet
-    final newToMark = event.visibleMessageIds
+    final newToMark = event.messageIds
         .where((id) => !current.alreadyReadIds.contains(id))
         .toList();
     if (newToMark.isEmpty) return;
@@ -560,9 +574,9 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  /// Reverses DESC result from DB/native into ASC (oldest→newest) for display.
+  /// Keep DESC order (newest first) for display with reverse: true ListView.
   List<SmsMessage> _toDisplayOrder(List<SmsMessage> descList) {
-    return descList.reversed.toList();
+    return descList;
   }
 
   /// Merges a fresh page of newest messages with the currently loaded older messages
@@ -583,7 +597,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
   void _onSelectSim(SelectSim event, Emitter<ConversationState> emit) {
     final current = state;
     if (current is ConversationLoaded) {
-      emit(current.copyWith(selectedSimId: event.subscriptionId));
+      emit(current.copyWith(selectedSimId: event.simId));
     }
   }
 

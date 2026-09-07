@@ -38,8 +38,8 @@ class SmsMessage extends Equatable {
 
   factory SmsMessage.fromMap(Map<String, dynamic> map) {
     return SmsMessage(
-      id: (map['id'] as num).toInt(),
-      threadId: (map['threadId'] as num).toInt(),
+      id: (map['id'] as num?)?.toInt() ?? 0,
+      threadId: (map['threadId'] as num?)?.toInt() ?? -1,
       address: map['address'] as String? ?? '',
       body: map['body'] as String? ?? '',
       date: (map['date'] as num?)?.toInt() ?? 0,

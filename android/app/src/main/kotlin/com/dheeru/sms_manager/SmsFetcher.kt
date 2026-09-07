@@ -231,60 +231,38 @@ object SmsFetcher {
     }
 
     /**
-     * Fetches messages for a single thread. Uses LIMIT/OFFSET in sortOrder —
-     * this is safe on content://sms (unlike the OEM-fragmented Threads provider).
+     * Fetches messages for a single thread. Uses manual pagination 
+     * to avoid OEM Bundle bugs and Android 11+ sortOrder bans.
      */
     fun fetchMessages(context: Context, threadId: Long?, limit: Int, offset: Int): List<Map<String, Any?>> {
         val messages = mutableListOf<Map<String, Any?>>()
-
         val selection = if (threadId != null) "${Telephony.Sms.THREAD_ID} = ?" else null
         val selectionArgs = if (threadId != null) arrayOf(threadId.toString()) else null
 
-        val cursor = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            val args = android.os.Bundle().apply {
-                if (selection != null) putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                if (selectionArgs != null) putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
-                putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${Telephony.Sms.DATE} DESC")
-                putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
-                putInt(android.content.ContentResolver.QUERY_ARG_OFFSET, offset)
+        context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            arrayOf(
+                Telephony.Sms._ID,
+                Telephony.Sms.THREAD_ID,
+                Telephony.Sms.ADDRESS,
+                Telephony.Sms.BODY,
+                Telephony.Sms.DATE,
+                Telephony.Sms.READ,
+                Telephony.Sms.TYPE,
+                Telephony.Sms.SUBSCRIPTION_ID,
+                Telephony.Sms.STATUS
+            ),
+            selection,
+            selectionArgs,
+            "${Telephony.Sms.DATE} DESC"
+        )?.use { c ->
+            Log.d(TAG, "fetchMessages(thread=$threadId): ${c.count} total rows available")
+            
+            // Manually paginate to avoid OEM Bundle bugs and Android 11+ sortOrder bans
+            if (offset > 0) {
+                if (!c.moveToPosition(offset - 1)) return emptyList()
             }
-            context.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
-                arrayOf(
-                    Telephony.Sms._ID,
-                    Telephony.Sms.THREAD_ID,
-                    Telephony.Sms.ADDRESS,
-                    Telephony.Sms.BODY,
-                    Telephony.Sms.DATE,
-                    Telephony.Sms.READ,
-                    Telephony.Sms.TYPE,
-                    Telephony.Sms.SUBSCRIPTION_ID,
-                    Telephony.Sms.STATUS
-                ),
-                args, null
-            )
-        } else {
-            context.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
-                arrayOf(
-                    Telephony.Sms._ID,
-                    Telephony.Sms.THREAD_ID,
-                    Telephony.Sms.ADDRESS,
-                    Telephony.Sms.BODY,
-                    Telephony.Sms.DATE,
-                    Telephony.Sms.READ,
-                    Telephony.Sms.TYPE,
-                    Telephony.Sms.SUBSCRIPTION_ID,
-                    Telephony.Sms.STATUS
-                ),
-                selection,
-                selectionArgs,
-                "${Telephony.Sms.DATE} DESC LIMIT $limit OFFSET $offset"
-            )
-        }
-
-        cursor?.use { c ->
-            Log.d(TAG, "fetchMessages(thread=$threadId): ${c.count} rows")
+            
             val idIdx       = c.getColumnIndexOrThrow(Telephony.Sms._ID)
             val threadIdIdx = c.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)
             val addressIdx  = c.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
@@ -292,23 +270,25 @@ object SmsFetcher {
             val dateIdx     = c.getColumnIndexOrThrow(Telephony.Sms.DATE)
             val readIdx     = c.getColumnIndexOrThrow(Telephony.Sms.READ)
             val typeIdx     = c.getColumnIndexOrThrow(Telephony.Sms.TYPE)
-            val subIdIdx    = c.getColumnIndex(Telephony.Sms.SUBSCRIPTION_ID)
-            val statusIdx   = c.getColumnIndex(Telephony.Sms.STATUS)
+            val subIdIdx    = c.getColumnIndexOrThrow(Telephony.Sms.SUBSCRIPTION_ID)
+            val statusIdx   = c.getColumnIndexOrThrow(Telephony.Sms.STATUS)
 
-            while (c.moveToNext()) {
+            var count = 0
+            while (c.moveToNext() && count < limit) {
                 messages.add(mapOf(
                     "id"             to c.getLong(idIdx),
                     "threadId"       to c.getLong(threadIdIdx),
-                    "address"        to (c.getString(addressIdx) ?: ""),
-                    "body"           to (c.getString(bodyIdx)    ?: ""),
+                    "address"        to c.getString(addressIdx),
+                    "body"           to c.getString(bodyIdx),
                     "date"           to c.getLong(dateIdx),
                     "read"           to c.getInt(readIdx),
                     "type"           to c.getInt(typeIdx),
-                    "subscriptionId" to if (subIdIdx >= 0) c.getInt(subIdIdx) else -1,
-                    "status"         to if (statusIdx >= 0) c.getInt(statusIdx) else -1
+                    "subscriptionId" to c.getInt(subIdIdx),
+                    "status"         to c.getInt(statusIdx)
                 ))
+                count++
             }
-        } ?: Log.e(TAG, "fetchMessages: null cursor for threadId=$threadId")
+        } ?: Log.e(TAG, "SMS content resolver returned null for fetchMessages")
 
         return messages
     }

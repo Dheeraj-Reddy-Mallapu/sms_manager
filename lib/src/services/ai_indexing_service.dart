@@ -21,11 +21,25 @@ class SearchRequest {
   SearchRequest(this.query, this.filters, this.replyTo);
 }
 
+/// Phases of SMS data availability
+enum SmsFetchPhase {
+  /// App just launched, don't know yet
+  unknown,
+  /// Background SMS message fetch is in progress
+  fetchingMessages,
+  /// All SMS loaded into DB, AI can now index
+  ready,
+}
+
 class AiProgress {
   final bool isIndexing;
   final int completed;
   final int total;
-  AiProgress(this.isIndexing, this.completed, this.total);
+  final SmsFetchPhase fetchPhase;
+
+  AiProgress(this.isIndexing, this.completed, this.total, {
+    this.fetchPhase = SmsFetchPhase.unknown,
+  });
 }
 
 class AiIndexingService {
@@ -39,10 +53,26 @@ class AiIndexingService {
   ReceivePort? _receivePort;
   bool _isIsolateRunning = false;
   bool _isIndexing = false; // Tracks if batch processing is currently running
+  SmsFetchPhase _smsFetchPhase = SmsFetchPhase.unknown;
 
   // Stream to expose indexing progress
   final _progressController = StreamController<AiProgress>.broadcast();
   Stream<AiProgress> get progressStream => _progressController.stream;
+
+  /// Call this when background SMS message fetch starts
+  void notifySmsFetchStarted() {
+    _smsFetchPhase = SmsFetchPhase.fetchingMessages;
+    _emitProgress();
+  }
+
+  /// Call this when ALL SMS messages are loaded into the DB.
+  /// This is the gate that allows AI indexing to begin.
+  void notifySmsFetchComplete() {
+    _smsFetchPhase = SmsFetchPhase.ready;
+    _emitProgress();
+    // Now safe to start indexing
+    triggerIndexing();
+  }
 
   Future<void> _emitProgress() async {
     try {
@@ -55,7 +85,12 @@ class AiIndexingService {
         int total = (counts.first['total'] as int?) ?? 0;
         int unindexed = (counts.first['unindexed'] as int?) ?? 0;
         _progressController.add(
-          AiProgress(_isIndexing, total - unindexed, total),
+          AiProgress(
+            _isIndexing,
+            total - unindexed,
+            total,
+            fetchPhase: _smsFetchPhase,
+          ),
         );
       }
     } catch (e) {
@@ -145,8 +180,13 @@ class AiIndexingService {
     _emitProgress();
   }
 
-  /// Called when new SMS arrives to re-trigger indexing
+  /// Called when new SMS arrives or SMS fetch is complete — triggers indexing.
+  /// Only call this when SMS messages are fully loaded in the DB.
   void triggerIndexing() {
+    // If called directly (e.g., subsequent launches, new SMS), SMS is already available
+    if (_smsFetchPhase == SmsFetchPhase.unknown) {
+      _smsFetchPhase = SmsFetchPhase.ready;
+    }
     if (!_isIsolateRunning) {
       initializeAndStartIndexing();
     } else if (!_isIndexing) {
@@ -179,16 +219,11 @@ class AiIndexingService {
     replyPort.listen((data) {
       if (!completer.isCompleted) {
         if (data is List) {
-          try {
-            completer.complete(
-              data
-                  .map((m) => SmsMessage.fromMap(m.cast<String, dynamic>()))
-                  .toList(),
-            );
-          } catch (e) {
-            print('Search error mapping: $e');
-            completer.complete([]);
-          }
+          final msgs = data
+              .where((e) => e != null)
+              .map((m) => SmsMessage.fromMap(Map<String, dynamic>.from(m as Map)))
+              .toList();
+          completer.complete(msgs);
         } else {
           completer.complete([]);
         }
@@ -240,13 +275,6 @@ void _indexingIsolateEntryPoint(_IsolateInitData initData) async {
       XNNPackDelegate(options: XNNPackDelegateOptions(numThreads: 4)),
     );
     interpreter = Interpreter.fromFile(File(initData.modelPath), options: options);
-    
-    // Explicitly allocate tensors to avoid reallocation overhead on each inference
-    for (int i = 0; i < interpreter!.getInputTensors().length; i++) {
-      interpreter!.resizeInputTensor(i, [1, 128]);
-    }
-    interpreter!.allocateTensors();
-
     tokenizer = BertTokenizer.fromStringContent(initData.vocabContent);
   } catch (e) {
     initData.sendPort.send('error: Failed to initialize AI in isolate: $e');
@@ -414,7 +442,7 @@ void _indexingIsolateEntryPoint(_IsolateInitData initData) async {
                 : (dotProduct / (sqrt(normA) * sqrt(normB)));
                 
             // Threshold cutoff: discard extremely low confidence semantic matches
-            if (similarity > 0.30) {
+            if (similarity > 0.15) {
               similarities.add(_DocScore(id, similarity));
             }
           }
@@ -466,7 +494,8 @@ void _indexingIsolateEntryPoint(_IsolateInitData initData) async {
         final messageMap = {for (var m in finalMessages) m['id'] as int: m};
         final sortedFinalMessages = topIds
             .map((id) => messageMap[id])
-            .whereType<Map<String, dynamic>>()
+            .where((m) => m != null)
+            .map((m) => Map<String, dynamic>.from(m as Map))
             .toList();
 
         message.replyTo.send(sortedFinalMessages);

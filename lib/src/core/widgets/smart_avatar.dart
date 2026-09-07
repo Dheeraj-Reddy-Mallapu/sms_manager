@@ -38,7 +38,9 @@ class _SmartAvatarState extends State<SmartAvatar> {
   @override
   void didUpdateWidget(SmartAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_photoUri != _getPhotoUri(oldWidget)) {
+    if (widget.thread?.id != oldWidget.thread?.id || 
+        widget.overrideAddress != oldWidget.overrideAddress) {
+      _photoBytes = null;
       _loadPhoto();
     }
   }
@@ -54,12 +56,14 @@ class _SmartAvatarState extends State<SmartAvatar> {
     return 'Unknown';
   }
 
-  String? _getPhotoUri(SmartAvatar widget) =>
-      widget.overrideContactPhotoUri ?? widget.thread?.contactPhotoUri;
-
   Future<void> _loadPhoto() async {
     final uri = _photoUri;
-    if (uri == null || uri.isEmpty) return;
+    if (uri == null || uri.isEmpty) {
+      if (mounted && _photoBytes != null) {
+        setState(() => _photoBytes = null);
+      }
+      return;
+    }
 
     if (_photoCache.containsKey(uri)) {
       setState(() {

@@ -38,6 +38,9 @@ final appRouter = GoRouter(
           path: 'conversation/:threadId',
           builder: (context, state) {
             final threadId = int.parse(state.pathParameters['threadId']!);
+            final highlightMessageIdStr = state.uri.queryParameters['messageId'];
+            final highlightMessageId = highlightMessageIdStr != null ? int.tryParse(highlightMessageIdStr) : null;
+            
             SmsThread? thread;
             String? initialBody;
 
@@ -57,6 +60,7 @@ final appRouter = GoRouter(
                 contactName: thread?.contactName,
                 contactPhotoUri: thread?.contactPhotoUri,
                 initialBody: initialBody,
+                highlightMessageId: highlightMessageId,
               ),
             );
           },

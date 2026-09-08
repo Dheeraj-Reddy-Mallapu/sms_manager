@@ -69,7 +69,10 @@ class _ComposeBarState extends State<ComposeBar> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    if (_debounce?.isActive ?? false) {
+      _debounce!.cancel();
+      NativeSmsService.saveDraft(widget.address, _controller.text);
+    }
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();

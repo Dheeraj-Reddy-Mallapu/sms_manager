@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sms_manager/src/core/utils/date_formatter.dart';
 import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
 import 'package:sms_manager/src/features/search/presentation/bloc/search_bloc.dart';
 import 'package:sms_manager/src/features/search/presentation/bloc/search_event.dart';
@@ -22,13 +23,7 @@ class _SearchPageState extends State<SearchPage> {
 
   String _sortBy = 'Relevance'; // or 'Date'
 
-  final List<String> _filters = [
-    'Has Link',
-    'Has Date',
-    'Has Number',
-    'Unread',
-    'Starred',
-  ];
+  final List<String> _filters = ['Unread', 'Starred', 'OTP', 'Has Link', 'Finance'];
 
   @override
   void initState() {
@@ -109,7 +104,7 @@ class _SearchPageState extends State<SearchPage> {
               autofocus: true,
               style: TextStyle(color: colorScheme.onSurface, fontSize: 16),
               decoration: InputDecoration(
-                hintText: 'Search with Hybrid AI...',
+                hintText: 'Try "hdfc last month" or "otp yesterday"',
                 hintStyle: TextStyle(
                   color: colorScheme.onSurfaceVariant.withAlpha(150),
                 ),
@@ -312,7 +307,7 @@ class _SearchPageState extends State<SearchPage> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                _formatDate(msg.date),
+                                DateFormatter.formatShortDate(msg.date),
                                 style: textTheme.bodySmall?.copyWith(
                                   color: colorScheme.primary,
                                 ),
@@ -320,13 +315,11 @@ class _SearchPageState extends State<SearchPage> {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            msg.body,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
+                          _buildHighlightedSnippet(
+                            body: msg.body,
+                            highlights: item.highlights,
+                            textTheme: textTheme,
+                            colorScheme: colorScheme,
                           ),
                         ],
                       ),
@@ -340,6 +333,47 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
     return const SizedBox();
+  }
+
+  /// Renders [body] with [highlights] bolded using RichText.
+  Widget _buildHighlightedSnippet({
+    required String body,
+    required List<(int, int)> highlights,
+    required TextTheme textTheme,
+    required ColorScheme colorScheme,
+  }) {
+    final base = textTheme.bodyMedium?.copyWith(
+      color: colorScheme.onSurfaceVariant,
+    );
+    final bold = base?.copyWith(
+      fontWeight: FontWeight.bold,
+      color: colorScheme.onSurface,
+    );
+
+    if (highlights.isEmpty) {
+      return Text(body, style: base, maxLines: 3, overflow: TextOverflow.ellipsis);
+    }
+
+    final spans = <TextSpan>[];
+    int cursor = 0;
+    for (final (start, end) in highlights) {
+      if (start > cursor) {
+        spans.add(TextSpan(text: body.substring(cursor, start), style: base));
+      }
+      if (end <= body.length) {
+        spans.add(TextSpan(text: body.substring(start, end), style: bold));
+      }
+      cursor = end;
+    }
+    if (cursor < body.length) {
+      spans.add(TextSpan(text: body.substring(cursor), style: base));
+    }
+
+    return RichText(
+      text: TextSpan(children: spans),
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   Widget _buildEmptyState({
@@ -465,18 +499,4 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  String _formatDate(int timestampMs) {
-    final date = DateTime.fromMillisecondsSinceEpoch(timestampMs);
-    final now = DateTime.now();
-    final diff = now.difference(date).inDays;
-
-    if (diff == 0) {
-      return '${date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour)}:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
-    } else if (diff < 7) {
-      return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][date.weekday -
-          1];
-    } else {
-      return '${date.month}/${date.day}/${date.year.toString().substring(2)}';
-    }
-  }
 }

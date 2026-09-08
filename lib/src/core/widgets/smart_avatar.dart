@@ -147,7 +147,8 @@ class _SmartAvatarState extends State<SmartAvatar> {
       hash = text.codeUnitAt(i) + ((hash << 5) - hash);
     }
     final hue = (hash.abs() % 360).toDouble();
-    return HSVColor.fromAHSV(1.0, hue, 0.6, 0.8).toColor();
+    // Fixed lightness to 0.4 and saturation to 0.65 to avoid white/black extremes
+    return HSLColor.fromAHSL(1.0, hue, 0.65, 0.4).toColor();
   }
 
   Color _onColor(Color background) {
@@ -181,19 +182,24 @@ class _SmartAvatarState extends State<SmartAvatar> {
     if (brandLogo != null && _photoUri == null) {
       return CircleAvatar(
         radius: widget.radius,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         child: ClipOval(
-          child: Image.network(
-            brandLogo,
-            width: widget.radius * 2,
-            height: widget.radius * 2,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, _) => Text(
-              initial,
-              style: TextStyle(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: widget.radius * 0.75,
+          child: Container(
+            color: Colors.white,
+            child: Image.network(
+              brandLogo,
+              width: widget.radius * 2,
+              height: widget.radius * 2,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, _) => Container(
+                width: widget.radius * 2,
+                height: widget.radius * 2,
+                color: avatarColor,
+                alignment: Alignment.center,
+                child: Text(
+                  initial,
+                  style: fallbackTextStyle,
+                ),
               ),
             ),
           ),

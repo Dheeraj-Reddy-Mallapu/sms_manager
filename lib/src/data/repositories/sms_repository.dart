@@ -1,119 +1,127 @@
 import 'dart:async';
 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sms_manager/src/data/local/database_helper.dart';
 import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/data/models/sms_message.dart';
 import 'package:sms_manager/src/services/native_sms_service.dart';
-import 'package:sms_manager/src/services/ai_indexing_service.dart';
+import 'package:sms_manager/src/services/sms_classifier.dart';
 
 class SmsRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
 
-  // ── Incoming SMS stream ──────────────────────────────────────────
-  // Dart side listens to this; HomeBloc subscribes and updates UI in real-time.
+  static const _keyFullSyncDone = 'full_sync_completed';
+  static const _keyLastSyncTs = 'last_sync_timestamp';
+
+  // ── Metadata (SharedPreferences) ─────────────────────────────────────────
+
+  Future<bool> getFullSyncCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyFullSyncDone) ?? false;
+  }
+
+  Future<void> setFullSyncCompleted(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyFullSyncDone, value);
+  }
+
+  Future<int> getLastSyncTimestamp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyLastSyncTs) ?? 0;
+  }
+
+  Future<void> setLastSyncTimestamp(int timestamp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyLastSyncTs, timestamp);
+  }
+
+  // ── Incoming SMS stream ──────────────────────────────────────────────────
   Stream<Map<String, dynamic>> get incomingSmsStream =>
       NativeSmsService.incomingSmsStream;
 
-  // ── Database System Changes ──────────────────────────────────────
-  // Triggered via ContentObserver whenever ANY app modifies the SMS DB.
+  // ── System SMS changes ────────────────────────────────────────────────────
   Stream<void> get systemSmsChanges => NativeSmsService.systemSmsChanges;
 
-  // ── Threads ──────────────────────────────────────────────────────
+  // ── Threads ───────────────────────────────────────────────────────────────
 
-  /// Returns cached threads instantly, then refreshes from native in background.
-  /// On very first open (empty DB) it waits for native fetch.
   Future<List<SmsThread>> getThreads({
-    int limit = 500,
+    int limit = 10000,
     int offset = 0,
     bool forceSync = false,
   }) async {
     if (forceSync) {
-      // Hard refresh: fetch fresh, save, return
       return await _fetchAndCacheThreads(limit: limit, offset: offset);
     }
-
     final cached = await _db.getThreads(limit: limit, offset: offset);
-    if (cached.isEmpty && forceSync) {
-      // First open and we want to wait
-      return await _fetchAndCacheThreads(limit: limit, offset: offset);
-    }
-    // Return cached instantly (might be empty); caller should trigger paginated sync separately
     return cached;
   }
 
-  /// Fetches from native (contacts are resolved inside SmsFetcher — no N calls),
-  /// saves to SQLite, returns result.
   Future<List<SmsThread>> _fetchAndCacheThreads({
-    int limit = 500,
+    int limit = 10000,
     int offset = 0,
   }) async {
-    // Note: contact lookup is now done INSIDE SmsFetcher.fetchThreads on the
-    // Kotlin side, so nativeData already includes contactName & contactPhotoUri.
     final nativeData = await NativeSmsService.fetchThreads(
       limit: limit,
       offset: offset,
     );
-
-    final threads = nativeData.map((raw) => SmsThread.fromMap(raw)).toList();
-
+    final threads = nativeData.map((raw) {
+      final thread = SmsThread.fromMap(raw);
+      final category = SmsClassifier.classify(
+        address: thread.address,
+        body: thread.snippet,
+        contactName: thread.contactName,
+      );
+      return thread.copyWith(category: category.isNotEmpty ? category : 'Updates');
+    }).toList();
     if (threads.isNotEmpty) {
       await _db.upsertThreads(threads);
     }
     return threads;
   }
 
-  /// Call this after returning cached threads to refresh in background.
   Future<List<SmsThread>> backgroundRefresh({
-    int limit = 500,
+    int limit = 10000,
     int offset = 0,
   }) async {
     return await _fetchAndCacheThreads(limit: limit, offset: offset);
   }
 
-  /// Smart Sync: Decides between full paginated sync and delta sync.
   Future<void> smartSync({int maxLimit = 10000, int chunkSize = 100}) async {
-    // Just drain the stream so background tasks can await completion
     await for (final _ in syncThreadsPaginated(
       maxLimit: maxLimit,
       chunkSize: chunkSize,
     )) {}
   }
 
-  /// Seamlessly fetch all threads in chunks so UI can update instantly with recent ones
   Stream<List<SmsThread>> syncThreadsPaginated({
     int maxLimit = 10000,
     int chunkSize = 100,
   }) async* {
-    final fullSyncCompleted = await _db.getFullSyncCompleted();
+    final fullSyncCompleted = await getFullSyncCompleted();
 
     if (!fullSyncCompleted) {
-      // ── First Launch / Full Sync ──
+      // ── First launch: full paginated sync ──────────────────────────────
       try {
         for (int offset = 0; offset < maxLimit; offset += chunkSize) {
           final chunk = await _fetchAndCacheThreads(
             limit: chunkSize,
             offset: offset,
           );
-
-          // Yield partial results so UI updates seamlessly
           yield await _db.getThreads(limit: maxLimit);
-
           if (chunk.length < chunkSize) break;
         }
 
-        await _db.setFullSyncCompleted(true);
+        await setFullSyncCompleted(true);
 
         final cached = await _db.getThreads(limit: 1);
         if (cached.isNotEmpty) {
-          await _db.setLastSyncTimestamp(cached.first.date);
+          await setLastSyncTimestamp(cached.first.date);
         }
 
-        // ── Background Message Sync for Search ──
-        // Fire and forget to avoid blocking the sync generator
+        // Background message fetch for full-text search
         Future.microtask(() async {
           try {
-            AiIndexingService.instance.notifySmsFetchStarted();
             int msgOffset = 0;
             while (true) {
               final msgsRaw = await NativeSmsService.fetchAllMessages(
@@ -121,53 +129,50 @@ class SmsRepository {
                 offset: msgOffset,
               );
               if (msgsRaw.isEmpty) break;
-
               final msgs = msgsRaw.map((e) => SmsMessage.fromMap(e)).toList();
               await _db.insertMessages(msgs);
-
               msgOffset += 500;
             }
-            // Only start AI after ALL messages are in DB
-            AiIndexingService.instance.notifySmsFetchComplete();
-          } catch (e) {
-            // Log or ignore — next launch recovery will retry
-          }
+          } catch (_) {}
         });
-      } catch (e) {
-        // Leave full_sync_completed as false to retry later
+      } catch (_) {
+        // Leave full_sync_completed false so we retry next launch
       }
     } else {
-      // ── Subsequent Launches / Delta Sync ──
-      final lastSync = await _db.getLastSyncTimestamp();
+      // ── Subsequent launches: delta sync ────────────────────────────────
+      final lastSync = await getLastSyncTimestamp();
       try {
         final nativeData = await NativeSmsService.fetchThreadsSince(lastSync);
-        final threads = nativeData
-            .map((raw) => SmsThread.fromMap(raw))
-            .toList();
+        final threads = nativeData.map((raw) {
+          final thread = SmsThread.fromMap(raw);
+          final category = SmsClassifier.classify(
+            address: thread.address,
+            body: thread.snippet,
+            contactName: thread.contactName,
+          );
+          return thread.copyWith(category: category.isNotEmpty ? category : 'Updates');
+        }).toList();
 
         if (threads.isNotEmpty) {
           await _db.upsertThreads(threads);
-
-          // Update last_sync_timestamp to the highest date we just fetched
           int maxDate = lastSync;
-          for (var t in threads) {
+          for (final t in threads) {
             if (t.date > maxDate) maxDate = t.date;
           }
-          await _db.setLastSyncTimestamp(maxDate);
+          await setLastSyncTimestamp(maxDate);
         }
 
-        // Recovery: if messages were partially synced due to OS interruption or bugs
+        // Recovery: re-fetch messages if messages table is sparse
         final msgCount = Sqflite.firstIntValue(await _db.database.then(
           (db) => db.rawQuery('SELECT COUNT(*) FROM messages'),
         )) ?? 0;
         final threadCount = Sqflite.firstIntValue(await _db.database.then(
           (db) => db.rawQuery('SELECT COUNT(*) FROM threads'),
         )) ?? 0;
-        
+
         if (msgCount < threadCount) {
           Future.microtask(() async {
             try {
-              AiIndexingService.instance.notifySmsFetchStarted();
               int msgOffset = 0;
               while (true) {
                 final msgsRaw = await NativeSmsService.fetchAllMessages(
@@ -175,33 +180,26 @@ class SmsRepository {
                   offset: msgOffset,
                 );
                 if (msgsRaw.isEmpty) break;
-
                 final msgs = msgsRaw.map((e) => SmsMessage.fromMap(e)).toList();
                 await _db.insertMessages(msgs);
-
                 msgOffset += 500;
               }
-              AiIndexingService.instance.notifySmsFetchComplete();
-            } catch (e) {
-              // Ignore
-            }
+            } catch (_) {}
           });
         }
-      } catch (e) {
-        // Silently fail or log, will retry next time
-      }
-      // Yield the final updated data
+      } catch (_) {}
+
       yield await _db.getThreads(limit: maxLimit);
     }
   }
 
-  // ── SIM Info ─────────────────────────────────────────────────────
+  // ── SIM Info ──────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getSimInfo() async {
     return await NativeSmsService.getSimInfo();
   }
 
-  // ── Messages ─────────────────────────────────────────────────────
+  // ── Messages ──────────────────────────────────────────────────────────────
 
   Future<List<SmsMessage>> getMessages(
     int threadId, {
@@ -210,11 +208,7 @@ class SmsRepository {
     bool forceSync = false,
   }) async {
     if (!forceSync) {
-      final cached = await _db.getMessages(
-        threadId,
-        limit: limit,
-        offset: offset,
-      );
+      final cached = await _db.getMessages(threadId, limit: limit, offset: offset);
       if (cached.isNotEmpty) return cached;
     }
 
@@ -224,36 +218,33 @@ class SmsRepository {
       offset: offset,
     );
     final messages = nativeData.map((e) => SmsMessage.fromMap(e)).toList();
-
     if (messages.isNotEmpty) {
       await _db.insertMessages(messages);
-      AiIndexingService.instance.triggerIndexing();
     }
     return messages;
   }
 
-  // ── Upsert single thread (e.g., after incoming SMS) ──────────────
-
   Future<void> upsertThreadFromIncomingSms(
     Map<String, dynamic> incomingEvent,
   ) async {
-    // Re-fetch the thread that this SMS belongs to from native
-    // (SmsFetcher will find it in content://sms)
-    final allThreads = await NativeSmsService.fetchThreads(
-      limit: 10,
-      offset: 0,
-    );
+    final allThreads = await NativeSmsService.fetchThreads(limit: 10, offset: 0);
     final address = incomingEvent['address'] as String? ?? '';
     final matched = allThreads.where((t) {
       return (t['address'] as String? ?? '') == address;
     }).toList();
     if (matched.isNotEmpty) {
-      final thread = SmsThread.fromMap(matched.first);
+      var thread = SmsThread.fromMap(matched.first);
+      final category = SmsClassifier.classify(
+        address: thread.address,
+        body: thread.snippet,
+        contactName: thread.contactName,
+      );
+      thread = thread.copyWith(category: category.isNotEmpty ? category : 'Updates');
       await _db.upsertThread(thread);
     }
   }
 
-  // ── Send / Mark / Delete ─────────────────────────────────────────
+  // ── Send / Mark / Delete ──────────────────────────────────────────────────
 
   Future<bool> sendSms(
     int threadId,
@@ -261,7 +252,6 @@ class SmsRepository {
     String body, {
     int? subscriptionId,
   }) async {
-    // 1. Perform native send which inserts to native provider (Outbox) and returns the real ID
     int nativeId = -1;
     try {
       nativeId = await NativeSmsService.sendSms(
@@ -272,7 +262,6 @@ class SmsRepository {
     } catch (_) {}
 
     if (nativeId > 0) {
-      // 2. Optimistic UI: Insert instantly with the real ID and type = 4 (Outbox/Sending)
       final msg = SmsMessage(
         id: nativeId,
         threadId: threadId,
@@ -280,15 +269,13 @@ class SmsRepository {
         body: body,
         date: DateTime.now().millisecondsSinceEpoch,
         read: true,
-        type: 4, // 4 = Outbox
+        type: 4, // Outbox
         subscriptionId: subscriptionId ?? -1,
       );
       await _db.insertMessages([msg]);
-      AiIndexingService.instance.triggerIndexing();
       return true;
-    } else {
-      return false;
     }
+    return false;
   }
 
   Future<void> markThreadAsRead(int threadId) async {

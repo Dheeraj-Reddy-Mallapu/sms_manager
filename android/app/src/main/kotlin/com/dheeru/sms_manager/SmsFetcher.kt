@@ -32,7 +32,8 @@ object SmsFetcher {
                 Telephony.Sms.ADDRESS,
                 Telephony.Sms.BODY,
                 Telephony.Sms.DATE,
-                Telephony.Sms.READ
+                Telephony.Sms.READ,
+                Telephony.Sms.TYPE
             ),
             null, null,
             "${Telephony.Sms.DATE} DESC"
@@ -45,6 +46,7 @@ object SmsFetcher {
             val bodyIdx     = c.getColumnIndexOrThrow(Telephony.Sms.BODY)
             val dateIdx     = c.getColumnIndexOrThrow(Telephony.Sms.DATE)
             val readIdx     = c.getColumnIndexOrThrow(Telephony.Sms.READ)
+            val typeIdx     = c.getColumnIndexOrThrow(Telephony.Sms.TYPE)
 
             Log.d(TAG, "SMS cursor has ${c.count} total rows")
 
@@ -52,12 +54,16 @@ object SmsFetcher {
                 val tid = c.getLong(threadIdIdx)
 
                 if (tid !in threadData) {
+                    val rawBody = c.getString(bodyIdx) ?: ""
+                    val isDraft = c.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT
+                    val snippet = if (isDraft) "[Draft] \$rawBody" else rawBody
+                    
                     threadOrder.add(tid)
                     threadData[tid] = mutableMapOf(
                         "id"           to tid,
                         "recipientIds" to "",
                         "address"      to (c.getString(addressIdx) ?: ""),
-                        "snippet"      to (c.getString(bodyIdx)    ?: ""),
+                        "snippet"      to snippet,
                         "date"         to c.getLong(dateIdx),
                         "read"         to c.getInt(readIdx),  // 0=unread for this msg
                         "messageCount" to 1,
@@ -131,9 +137,11 @@ object SmsFetcher {
                 Telephony.Sms.ADDRESS,
                 Telephony.Sms.BODY,
                 Telephony.Sms.DATE,
-                Telephony.Sms.READ
+                Telephony.Sms.READ,
+                Telephony.Sms.TYPE
             ),
-            "${Telephony.Sms.DATE} > ?", arrayOf(timestamp.toString()),
+            "${Telephony.Sms.DATE} > ?",
+            arrayOf(timestamp.toString()),
             "${Telephony.Sms.DATE} DESC"
         )
 
@@ -144,17 +152,22 @@ object SmsFetcher {
             val bodyIdx     = c.getColumnIndexOrThrow(Telephony.Sms.BODY)
             val dateIdx     = c.getColumnIndexOrThrow(Telephony.Sms.DATE)
             val readIdx     = c.getColumnIndexOrThrow(Telephony.Sms.READ)
+            val typeIdx     = c.getColumnIndexOrThrow(Telephony.Sms.TYPE)
 
             while (c.moveToNext()) {
                 val tid = c.getLong(threadIdIdx)
 
                 if (tid !in threadData) {
+                    val rawBody = c.getString(bodyIdx) ?: ""
+                    val isDraft = c.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT
+                    val snippet = if (isDraft) "[Draft] $rawBody" else rawBody
+
                     threadOrder.add(tid)
                     threadData[tid] = mutableMapOf(
                         "id"           to tid,
                         "recipientIds" to "",
                         "address"      to (c.getString(addressIdx) ?: ""),
-                        "snippet"      to (c.getString(bodyIdx)    ?: ""),
+                        "snippet"      to snippet,
                         "date"         to c.getLong(dateIdx),
                         "read"         to c.getInt(readIdx),
                         "messageCount" to 1,
@@ -236,8 +249,8 @@ object SmsFetcher {
      */
     fun fetchMessages(context: Context, threadId: Long?, limit: Int, offset: Int): List<Map<String, Any?>> {
         val messages = mutableListOf<Map<String, Any?>>()
-        val selection = if (threadId != null) "${Telephony.Sms.THREAD_ID} = ?" else null
-        val selectionArgs = if (threadId != null) arrayOf(threadId.toString()) else null
+        val selection = if (threadId != null) "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} != ?" else "${Telephony.Sms.TYPE} != ?"
+        val selectionArgs = if (threadId != null) arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_DRAFT.toString()) else arrayOf(Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
 
         context.contentResolver.query(
             Telephony.Sms.CONTENT_URI,

@@ -41,6 +41,9 @@ final appRouter = GoRouter(
             final highlightMessageIdStr = state.uri.queryParameters['messageId'];
             final highlightMessageId = highlightMessageIdStr != null ? int.tryParse(highlightMessageIdStr) : null;
             
+            final targetDateStr = state.uri.queryParameters['targetDate'];
+            final targetDate = targetDateStr != null ? int.tryParse(targetDateStr) : null;
+            
             SmsThread? thread;
             String? initialBody;
 
@@ -61,6 +64,7 @@ final appRouter = GoRouter(
                 contactPhotoUri: thread?.contactPhotoUri,
                 initialBody: initialBody,
                 highlightMessageId: highlightMessageId,
+                targetDate: targetDate,
               ),
             );
           },

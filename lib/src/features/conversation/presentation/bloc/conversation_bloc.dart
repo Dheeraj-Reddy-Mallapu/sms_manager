@@ -17,9 +17,10 @@ class LoadMessages extends ConversationEvent {
   final int threadId;
   final String address;
   final int? highlightMessageId;
-  const LoadMessages(this.threadId, {this.address = '', this.highlightMessageId});
+  final int? targetDate;
+  const LoadMessages(this.threadId, {this.address = '', this.highlightMessageId, this.targetDate});
   @override
-  List<Object?> get props => [threadId, address, highlightMessageId];
+  List<Object?> get props => [threadId, address, highlightMessageId, targetDate];
 }
 
 class LoadMoreMessages extends ConversationEvent {
@@ -137,6 +138,7 @@ class ConversationLoaded extends ConversationState {
   final String searchQuery;
   final int? selectedSimId;
   final int? highlightMessageId;
+  final int? scrollToMessageId;
   final Set<int> alreadyReadIds;
   final List<Map<String, dynamic>> simInfoList;
 
@@ -152,6 +154,7 @@ class ConversationLoaded extends ConversationState {
     this.searchQuery = '',
     this.selectedSimId,
     this.highlightMessageId,
+    this.scrollToMessageId,
     this.alreadyReadIds = const {},
     this.simInfoList = const [],
   });
@@ -174,6 +177,7 @@ class ConversationLoaded extends ConversationState {
     String? searchQuery,
     int? selectedSimId,
     int? highlightMessageId,
+    int? scrollToMessageId,
     Set<int>? alreadyReadIds,
     List<Map<String, dynamic>>? simInfoList,
   }) {
@@ -189,6 +193,7 @@ class ConversationLoaded extends ConversationState {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedSimId: selectedSimId ?? this.selectedSimId,
       highlightMessageId: highlightMessageId ?? this.highlightMessageId,
+      scrollToMessageId: scrollToMessageId ?? this.scrollToMessageId,
       alreadyReadIds: alreadyReadIds ?? this.alreadyReadIds,
       simInfoList: simInfoList ?? this.simInfoList,
     );
@@ -207,6 +212,7 @@ class ConversationLoaded extends ConversationState {
         searchQuery,
         selectedSimId,
         highlightMessageId,
+        scrollToMessageId,
         alreadyReadIds,
         simInfoList,
       ];
@@ -268,7 +274,7 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     }, onError: (_) {});
 
     try {
-      final limit = event.highlightMessageId != null ? 5000 : _pageSize;
+      final limit = (event.highlightMessageId != null || event.targetDate != null) ? 5000 : _pageSize;
       
       // Fetch newest 50 (or 5000) from cache (fast), then refresh from native
       final cached = await repository.getMessages(
@@ -276,6 +282,18 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
         limit: limit,
         offset: 0,
       );
+      
+      int? effectiveHighlightId = event.highlightMessageId;
+      int? effectiveScrollId = event.highlightMessageId;
+      
+      if (effectiveScrollId == null && event.targetDate != null) {
+        // Try to find the message that matches this exact date to scroll to (no highlight)
+        try {
+          final targetMsg = cached.firstWhere((m) => m.date == event.targetDate);
+          effectiveScrollId = targetMsg.id;
+        } catch (_) {}
+      }
+      
       final displayList = _toDisplayOrder(cached);
 
       // hasMore: if we got a full page, assume there are more
@@ -287,14 +305,15 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
           threadId: event.threadId,
           address: event.address,
           hasMore: hasMore,
-          highlightMessageId: event.highlightMessageId,
+          highlightMessageId: effectiveHighlightId,
+          scrollToMessageId: effectiveScrollId,
         ),
       );
 
       // Background-refresh from native
       final fresh = await repository.getMessages(
         event.threadId,
-        limit: _pageSize,
+        limit: limit,
         offset: 0,
         forceSync: true,
       );
@@ -316,9 +335,11 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
             messages: freshDisplay,
             threadId: event.threadId,
             address: event.address,
-            hasMore: fresh.length >= _pageSize,
+            hasMore: fresh.length >= limit,
             simInfoList: simInfoList,
             selectedSimId: defaultSimId,
+            highlightMessageId: effectiveHighlightId,
+            scrollToMessageId: effectiveScrollId,
           ),
         );
       }

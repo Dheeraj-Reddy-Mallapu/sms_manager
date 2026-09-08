@@ -9,10 +9,17 @@ class SmsThread extends Equatable {
   final int date;
   final bool read;
   final int unreadCount;
-  final String category; // E.g., 'Personal', 'Transactions', 'Promotions'
+  final String category; // E.g., 'Finance,Shopping'
   final String? contactName;
   final String? contactPhotoUri;
   final bool hasStarredMessages;
+  final bool isArchived;
+  final bool isMuted;
+  final bool isBlocked;
+
+  /// Returns the categories as a list, filtering out empty strings.
+  List<String> get categoryList => 
+      category.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
   const SmsThread({
     required this.id,
@@ -27,6 +34,9 @@ class SmsThread extends Equatable {
     this.contactName,
     this.contactPhotoUri,
     this.hasStarredMessages = false,
+    this.isArchived = false,
+    this.isMuted = false,
+    this.isBlocked = false,
   });
 
   factory SmsThread.fromMap(Map<String, dynamic> map) {
@@ -44,6 +54,9 @@ class SmsThread extends Equatable {
       contactPhotoUri: map['contactPhotoUri'] as String?,
       hasStarredMessages:
           ((map['hasStarredMessages'] as num?)?.toInt() ?? 0) == 1,
+      isArchived: ((map['isArchived'] as num?)?.toInt() ?? 0) == 1,
+      isMuted: ((map['isMuted'] as num?)?.toInt() ?? 0) == 1,
+      isBlocked: ((map['isBlocked'] as num?)?.toInt() ?? 0) == 1,
     );
   }
 
@@ -60,6 +73,9 @@ class SmsThread extends Equatable {
       'category': category,
       'contactName': contactName,
       'contactPhotoUri': contactPhotoUri,
+      'isArchived': isArchived ? 1 : 0,
+      'isMuted': isMuted ? 1 : 0,
+      'isBlocked': isBlocked ? 1 : 0,
       // hasStarredMessages is derived, not stored directly in threads table usually
     };
   }
@@ -73,6 +89,9 @@ class SmsThread extends Equatable {
     String? snippet,
     int? date,
     String? address,
+    bool? isArchived,
+    bool? isMuted,
+    bool? isBlocked,
   }) {
     return SmsThread(
       id: id,
@@ -86,6 +105,10 @@ class SmsThread extends Equatable {
       category: category ?? this.category,
       contactName: contactName ?? this.contactName,
       contactPhotoUri: contactPhotoUri ?? this.contactPhotoUri,
+      isArchived: isArchived ?? this.isArchived,
+      isMuted: isMuted ?? this.isMuted,
+      isBlocked: isBlocked ?? this.isBlocked,
+      hasStarredMessages: hasStarredMessages,
     );
   }
 
@@ -103,5 +126,8 @@ class SmsThread extends Equatable {
     contactName,
     contactPhotoUri,
     hasStarredMessages,
+    isArchived,
+    isMuted,
+    isBlocked,
   ];
 }

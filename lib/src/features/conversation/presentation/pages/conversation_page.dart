@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sms_manager/src/data/models/sms_message.dart';
 import 'package:sms_manager/src/features/conversation/presentation/bloc/conversation_bloc.dart';
 import 'package:sms_manager/src/features/conversation/presentation/widgets/message_bubble.dart';
+import 'package:sms_manager/src/features/conversation/presentation/widgets/highlight_pulser.dart';
 import 'package:sms_manager/src/features/conversation/presentation/widgets/date_separator.dart';
 import 'package:sms_manager/src/features/conversation/presentation/widgets/compose_bar.dart';
 import 'package:sms_manager/src/features/conversation/presentation/widgets/message_context_menu.dart';
@@ -24,6 +25,8 @@ class ConversationPage extends StatefulWidget {
   final String? initialBody;
   final int? highlightMessageId;
 
+  final int? targetDate;
+
   const ConversationPage({
     super.key,
     required this.threadId,
@@ -32,6 +35,7 @@ class ConversationPage extends StatefulWidget {
     this.contactPhotoUri,
     this.initialBody,
     this.highlightMessageId,
+    this.targetDate,
   });
 
   @override
@@ -59,6 +63,7 @@ class _ConversationPageState extends State<ConversationPage> {
         widget.threadId, 
         address: address, 
         highlightMessageId: widget.highlightMessageId,
+        targetDate: widget.targetDate,
       ),
     );
     // Ensure we always start at the bottom (newest messages) after first frame.
@@ -237,10 +242,12 @@ class _ConversationPageState extends State<ConversationPage> {
             );
           }
 
-          // Scroll to highlighted message (from search result tap)
-          if (state.highlightMessageId != null && !_didHighlight) {
+          // Scroll to highlighted message
+          if (state.scrollToMessageId != null && !_didHighlight) {
             _didHighlight = true;
-            _scrollToHighlight(state.highlightMessageId!);
+            _scrollToHighlight(state.scrollToMessageId!);
+          } else if (!_didHighlight) {
+            _didHighlight = true;
           }
         }
       },
@@ -632,18 +639,21 @@ class _ConversationPageState extends State<ConversationPage> {
                   date: DateTime.fromMillisecondsSinceEpoch(message.date),
                 ),
               if (showUnreadSep) const UnreadSeparator(),
-              MessageBubble(
-                message: message,
-                position: pos,
-                isSelected: state.selectedIds.contains(message.id),
+              HighlightPulser(
                 isHighlighted: isHighlighted,
-                searchQuery: state.searchQuery,
-                onShowMenu: (msg) => _showContextMenu(context, msg),
-                onTap: state.selectedIds.isNotEmpty
-                    ? (msg) => context.read<ConversationBloc>().add(
-                        SelectMessage(msg.id),
-                      )
-                    : null,
+                highlightColor: Theme.of(context).colorScheme.primaryContainer.withAlpha(100),
+                child: MessageBubble(
+                  message: message,
+                  position: pos,
+                  isSelected: state.selectedIds.contains(message.id),
+                  searchQuery: state.searchQuery,
+                  onShowMenu: (msg) => _showContextMenu(context, msg),
+                  onTap: state.selectedIds.isNotEmpty
+                      ? (msg) => context.read<ConversationBloc>().add(
+                          SelectMessage(msg.id),
+                        )
+                      : null,
+                ),
               ),
             ],
           );

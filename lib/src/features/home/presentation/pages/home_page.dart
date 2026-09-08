@@ -1,12 +1,15 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:sms_manager/src/services/sms_extractor.dart';
 import 'package:sms_manager/src/core/widgets/smart_avatar.dart';
 import 'package:sms_manager/src/core/widgets/timeline_scrollbar.dart';
 import 'package:sms_manager/src/data/models/sms_thread.dart';
 import 'package:sms_manager/src/features/home/presentation/bloc/home_bloc.dart';
-import 'package:sms_manager/src/services/ai_indexing_service.dart';
+import 'package:sms_manager/src/core/utils/date_formatter.dart';
 import 'package:sms_manager/src/services/native_sms_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -182,7 +185,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 8),
               ],
               flexibleSpace: FlexibleSpaceBar(
-                titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                 title: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,77 +198,15 @@ class _HomePageState extends State<HomePage> {
                         fontSize: 20,
                       ),
                     ),
-                    StreamBuilder<AiProgress>(
-                      stream: AiIndexingService.instance.progressStream,
-                      initialData: AiProgress(false, 0, 0),
-                      builder: (context, snapshot) {
-                        final progress = snapshot.data!;
-                        final phase = progress.fetchPhase;
-                        final isIndexing = progress.isIndexing;
-
-                        // Determine what to show based on the phase
-                        String label;
-                        IconData icon;
-                        Color color;
-                        bool showSpinner;
-
-                        if (phase == SmsFetchPhase.fetchingMessages) {
-                          label = 'Loading messages...';
-                          icon = Icons.downloading_rounded;
-                          color = colorScheme.tertiary;
-                          showSpinner = true;
-                        } else if (isIndexing) {
-                          final pct = progress.total > 0
-                              ? ' (${progress.completed}/${progress.total})'
-                              : '';
-                          label = 'AI indexing$pct...';
-                          icon = Icons.auto_awesome;
-                          color = colorScheme.primary;
-                          showSpinner = true;
-                        } else if (phase == SmsFetchPhase.ready || progress.completed > 0) {
-                          label = 'Local AI search ready';
-                          icon = Icons.check_circle;
-                          color = Colors.green;
-                          showSpinner = false;
-                        } else {
-                          // unknown phase on subsequent launches: just show ready if we have embeddings
-                          label = progress.total > 0
-                              ? 'AI search ready (${progress.completed}/${progress.total})'
-                              : 'Local AI search ready';
-                          icon = Icons.check_circle;
-                          color = Colors.green;
-                          showSpinner = false;
-                        }
-
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              showSpinner
-                                  ? SizedBox(
-                                      width: 10,
-                                      height: 10,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: color,
-                                      ),
-                                    )
-                                  : Icon(icon, size: 14, color: color),
-                              const SizedBox(width: 6),
-                              Text(
-                                label,
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                    if (state.activeCategory != 'Smart ✦')
+                      Text(
+                        '${filteredThreads.length} conversation${filteredThreads.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -280,57 +221,59 @@ class _HomePageState extends State<HomePage> {
           ),
 
           // Thread list
-          filteredThreads.isEmpty
-              ? SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.inbox,
-                          size: 64,
-                          color: colorScheme.outlineVariant,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No messages',
-                          style: TextStyle(color: colorScheme.onSurfaceVariant),
-                        ),
-                      ],
+          if (state.activeCategory == 'Smart ✦')
+            _buildSmartView(context, state, state.threads, colorScheme)
+          else if (filteredThreads.isEmpty)
+            SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.inbox,
+                      size: 64,
+                      color: colorScheme.outlineVariant,
                     ),
-                  ),
-                )
-              : SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 80),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => _buildThreadTile(
-                        context,
-                        state,
-                        filteredThreads[index],
-                        colorScheme,
-                      ),
-                      childCount: filteredThreads.length,
+                    const SizedBox(height: 12),
+                    Text(
+                      'No messages',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
-                  ),
+                  ],
                 ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 80),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _buildThreadTile(
+                    context,
+                    state,
+                    filteredThreads[index],
+                    colorScheme,
+                  ),
+                  childCount: filteredThreads.length,
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
   List<SmsThread> _filterThreads(List<SmsThread> threads, String category) {
+    if (category == 'Smart ✦' || category == 'All') return threads;
+    
     switch (category) {
       case 'Unread':
         return threads.where((t) => !t.read).toList();
-      case 'Personal':
-        return threads.where((t) => t.contactName != null).toList();
-      case 'Transactions':
-        return threads.where((t) => t.category == 'Transactions').toList();
       case 'Starred':
         return threads.where((t) => t.hasStarredMessages).toList();
       default:
-        return threads;
+        // Multi-label matching logic (e.g. category 'Finance' matches 'Finance,Shopping')
+        return threads.where((t) => t.categoryList.contains(category)).toList();
     }
   }
 
@@ -339,62 +282,29 @@ class _HomePageState extends State<HomePage> {
     HomeLoaded state,
     ColorScheme colorScheme,
   ) {
-    final categories = ['All', 'Unread', 'Personal', 'Transactions', 'Starred'];
+    final categories = [
+      'Smart ✦', 'All', 'Unread', 'Finance', 'OTP', 
+      'Shopping', 'Travel', 'Govt & Alerts', 'Health', 'People', 'Starred'
+    ];
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: categories.map((category) {
           final isSelected = state.activeCategory == category;
-          final badgeCount = category == 'Unread'
-              ? state.threads.where((t) => !t.read).length
-              : (category == 'All' ? state.threads.length : 0);
-
-          final displayLabel = category;
 
           return Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: FilterChip(
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(displayLabel),
-                  if (badgeCount > 0) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? colorScheme.onPrimary.withAlpha(204)
-                            : colorScheme.primary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        badgeCount > 9999 ? '9999+' : badgeCount.toString(),
-                        style: TextStyle(
-                          color: isSelected
-                              ? colorScheme.primary
-                              : colorScheme.onPrimary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              label: Text(category),
               selected: isSelected,
-              onSelected: (_) =>
-                  context.read<HomeBloc>().add(ChangeCategoryFilter(category)),
+              onSelected: (selected) {
+                if (selected) context.read<HomeBloc>().add(ChangeCategoryFilter(category));
+              },
               backgroundColor: colorScheme.surfaceContainerHighest,
               selectedColor: colorScheme.primary,
               labelStyle: TextStyle(
-                color: isSelected
-                    ? colorScheme.onPrimary
-                    : colorScheme.onSurfaceVariant,
+                color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
               shape: RoundedRectangleBorder(
@@ -409,12 +319,214 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// The Smart View is injected natively as Slivers into the CustomScrollView
+  Widget _buildSmartView(BuildContext context, HomeLoaded state, List<SmsThread> threads, ColorScheme colorScheme) {
+    final now = DateTime.now();
+    final fifteenMinsAgo = now.subtract(const Duration(minutes: 15));
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    
+    // HERO ZONE: Active OTPs (< 15 mins)
+    final activeOtps = threads.where((t) {
+      if (!t.categoryList.contains('OTP')) return false;
+      final tDate = DateTime.fromMillisecondsSinceEpoch(t.date);
+      return tDate.isAfter(fifteenMinsAgo);
+    }).toList();
+
+    // HERO ZONE: Urgent Alerts (Govt alerts < 24h)
+    final twentyFourHoursAgo = now.subtract(const Duration(hours: 24));
+    final urgentAlerts = threads.where((t) {
+      if (!t.categoryList.contains('Govt & Alerts')) return false;
+      final tDate = DateTime.fromMillisecondsSinceEpoch(t.date);
+      return tDate.isAfter(twentyFourHoursAgo);
+    }).toList();
+
+    // DIGEST: Today's stuff
+    final todaysFinance = threads.where((t) {
+      if (!t.categoryList.contains('Finance')) return false;
+      return DateTime.fromMillisecondsSinceEpoch(t.date).isAfter(startOfToday);
+    }).toList();
+    
+    final todaysShopping = threads.where((t) {
+      if (!t.categoryList.contains('Shopping') && !t.categoryList.contains('Travel')) return false;
+      return DateTime.fromMillisecondsSinceEpoch(t.date).isAfter(startOfToday);
+    }).toList();
+
+    final unreadPeople = threads.where((t) {
+      return !t.read && t.categoryList.contains('People');
+    }).toList();
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate([
+          
+          if (activeOtps.isNotEmpty) ...[
+            Text('Right Now', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...activeOtps.map((t) => _buildHeroCard(context, t, colorScheme, isOtp: true)),
+            const SizedBox(height: 16),
+          ],
+
+          if (urgentAlerts.isNotEmpty) ...[
+            if (activeOtps.isEmpty)
+               Text('Right Now', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...urgentAlerts.map((t) => _buildHeroCard(context, t, colorScheme, isAlert: true)),
+            const SizedBox(height: 16),
+          ],
+          
+          if (todaysFinance.isNotEmpty || todaysShopping.isNotEmpty || unreadPeople.isNotEmpty) ...[
+            Text("Today's Digest", style: Theme.of(context).textTheme.titleSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            
+            if (unreadPeople.isNotEmpty)
+              _buildDigestCard(context, state, 'Unread Personal', '${unreadPeople.length} unread messages from contacts', Icons.person, unreadPeople, colorScheme),
+              
+            if (todaysFinance.isNotEmpty)
+              _buildDigestCard(context, state, 'Financial Updates', '${todaysFinance.length} transactions today', Icons.account_balance_wallet, todaysFinance, colorScheme),
+              
+            if (todaysShopping.isNotEmpty)
+              _buildDigestCard(context, state, 'Orders & Travel', '${todaysShopping.length} updates today', Icons.local_shipping, todaysShopping, colorScheme),
+              
+            const SizedBox(height: 24),
+          ],
+          
+          Center(
+             child: Text("— You're all caught up —", style: TextStyle(color: colorScheme.onSurfaceVariant.withAlpha(128))),
+          ),
+          const SizedBox(height: 80),
+
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildHeroCard(BuildContext context, SmsThread thread, ColorScheme colorScheme, {bool isOtp = false, bool isAlert = false}) {
+    final bgColor = isAlert ? colorScheme.errorContainer : colorScheme.primaryContainer;
+    final fgColor = isAlert ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer;
+    
+    IconData icon = Icons.notifications;
+    if (isOtp) icon = Icons.password;
+    if (isAlert) icon = Icons.warning;
+
+    return Card(
+      elevation: 0,
+      color: bgColor,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => context.push('/home/conversation/${thread.id}?targetDate=${thread.date}', extra: thread),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: fgColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      thread.contactName ?? thread.address,
+                      style: TextStyle(fontWeight: FontWeight.bold, color: fgColor),
+                    ),
+                  ),
+                  Text(DateFormatter.formatShortDate(thread.date), style: TextStyle(fontSize: 12, color: fgColor.withAlpha(200))),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (isOtp) ...[
+                Builder(
+                  builder: (context) {
+                    final extracted = SmsExtractor.extract(thread.snippet);
+                    if (extracted.otp != null) {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            extracted.otp!,
+                            style: TextStyle(
+                              color: fgColor,
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colorScheme.onPrimaryContainer,
+                              foregroundColor: colorScheme.primaryContainer,
+                            ),
+                            icon: const Icon(Icons.copy, size: 16),
+                            label: const Text('Copy'),
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: extracted.otp!));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('OTP Copied!')),
+                              );
+                            },
+                          ),
+                        ],
+                      );
+                    }
+                    return Text(
+                      thread.snippet,
+                      style: TextStyle(color: fgColor, fontSize: 16),
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                    );
+                  }
+                ),
+              ] else ...[
+                Text(
+                  thread.snippet,
+                  style: TextStyle(color: fgColor, fontSize: 16),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDigestCard(BuildContext context, HomeLoaded state, String title, String subtitle, IconData icon, List<SmsThread> threads, ColorScheme colorScheme) {
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colorScheme.surfaceContainerHighest),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.all(8.0),
+          leading: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: colorScheme.secondaryContainer, shape: BoxShape.circle),
+            child: Icon(icon, color: colorScheme.onSecondaryContainer),
+          ),
+          title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSurface, fontSize: 16)),
+          subtitle: Text(subtitle, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
+          children: threads.map((thread) => _buildThreadTile(context, state, thread, colorScheme, isDigest: true)).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildThreadTile(
     BuildContext context,
     HomeLoaded state,
     SmsThread thread,
-    ColorScheme colorScheme,
-  ) {
+    ColorScheme colorScheme, {
+    bool isDigest = false,
+  }) {
     final displayName = thread.contactName?.isNotEmpty == true
         ? thread.contactName!
         : thread.address.isNotEmpty
@@ -422,7 +534,7 @@ class _HomePageState extends State<HomePage> {
         : 'Unknown';
 
     final isUnread = !thread.read;
-    final timeString = _formatDate(thread.date);
+    final timeString = DateFormatter.formatShortDate(thread.date);
 
     final isSelected = state.selectedThreadIds.contains(thread.id);
 
@@ -434,7 +546,7 @@ class _HomePageState extends State<HomePage> {
         if (state.isSelectionMode) {
           context.read<HomeBloc>().add(ToggleThreadSelection(thread.id));
         } else {
-          context.go('/home/conversation/${thread.id}', extra: thread);
+          context.go('/home/conversation/${thread.id}?targetDate=${thread.date}', extra: thread);
         }
       },
       borderRadius: BorderRadius.circular(12),
@@ -523,21 +635,82 @@ class _HomePageState extends State<HomePage> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          thread.snippet.isNotEmpty
-                              ? thread.snippet
-                              : '(No message content)',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: isUnread
-                                    ? colorScheme.onSurface
-                                    : colorScheme.onSurfaceVariant,
-                                fontWeight: isUnread
-                                    ? FontWeight.w500
-                                    : FontWeight.normal,
+                        child: Builder(
+                          builder: (context) {
+                            final ext = SmsExtractor.extract(thread.snippet);
+                            
+                            if (ext.amount != null || ext.pnr != null || ext.url != null || ext.otp != null) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (ext.amount != null)
+                                    Text(
+                                      '${ext.transactionType == 'bill' ? '🗓️ Due' : (ext.transactionType == 'debit' ? '🔴 Debited' : '🟢 Credited')} ${ext.amount}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  if (ext.otp != null)
+                                    Text(
+                                      '🔑 OTP: ${ext.otp}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        letterSpacing: 1.5,
+                                        color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    thread.snippet.isNotEmpty ? thread.snippet : '(No message content)',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                                      fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (ext.pnr != null || ext.url != null) ...[
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 8,
+                                      children: [
+                                        if (ext.url != null)
+                                          ActionChip(
+                                            label: const Text('🔗 Open Link', style: TextStyle(fontSize: 11)),
+                                            onPressed: () {}, 
+                                            padding: EdgeInsets.zero,
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                        if (ext.pnr != null)
+                                          ActionChip(
+                                            label: Text('✈️ Copy PNR: ${ext.pnr}', style: const TextStyle(fontSize: 11)),
+                                            onPressed: () {
+                                              Clipboard.setData(ClipboardData(text: ext.pnr!));
+                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PNR Copied!')));
+                                            },
+                                            padding: EdgeInsets.zero,
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              );
+                            }
+
+                            return Text(
+                              thread.snippet.isNotEmpty ? thread.snippet : '(No message content)',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                                fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal,
                               ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            );
+                          }
                         ),
                       ),
                       if (isUnread) ...[
@@ -574,21 +747,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  String _formatDate(int timestampMs) {
-    final date = DateTime.fromMillisecondsSinceEpoch(timestampMs);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final dateDay = DateTime(date.year, date.month, date.day);
-    final diff = today.difference(dateDay).inDays;
-
-    if (diff == 0) return DateFormat.jm().format(date); // 10:38 AM
-    if (diff == 1) return 'Yesterday';
-    if (diff < 7) return DateFormat('EEEE').format(date); // Tuesday
-    if (date.year == now.year) {
-      return DateFormat('MMM d').format(date); // Aug 24
-    }
-    return DateFormat('MM/dd/yy').format(date); // 08/24/23
-  }
 
   void _showMoreSheet(BuildContext context, ColorScheme colorScheme) {
     showModalBottomSheet(
@@ -633,18 +791,53 @@ class _HomePageState extends State<HomePage> {
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded),
                 title: const Text('About'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  showAboutDialog(
+                  final info = await PackageInfo.fromPlatform();
+                  if (!context.mounted) return;
+                  
+                  showDialog(
                     context: context,
-                    applicationName: 'SMS Manager',
-                    applicationVersion: '1.0.0',
-                    applicationIcon: const Icon(Icons.message, size: 48),
-                    children: [
-                      const Text(
-                        'A smart SMS manager with local AI categorization.',
+                    builder: (context) => AlertDialog(
+                      icon: Image.asset(
+                        'assets/launcher_icon.webp',
+                        width: 48,
+                        height: 48,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.message_rounded, size: 48),
                       ),
-                    ],
+                      title: const Text('SMS Manager'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Version ${info.version}', style: Theme.of(context).textTheme.bodyMedium),
+                          const SizedBox(height: 8),
+                          Text('Made by Dheeru', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            showLicensePage(
+                              context: context,
+                              applicationName: 'SMS Manager',
+                              applicationVersion: info.version,
+                              applicationIcon: Image.asset('assets/launcher_icon.webp', width: 48, height: 48),
+                            );
+                          },
+                          child: const Text('View Licenses'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            launchUrl(Uri.parse('https://play.google.com/store/apps/developer?id=Dheeru'));
+                          },
+                          child: const Text('More Apps'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),

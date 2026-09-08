@@ -13,7 +13,6 @@ class MessageBubble extends StatelessWidget {
   final SmsMessage message;
   final BubblePosition position;
   final bool isSelected;
-  final bool isHighlighted;
   final String searchQuery;
 
   /// Called when user taps or long-presses to open context sheet.
@@ -27,7 +26,6 @@ class MessageBubble extends StatelessWidget {
     required this.message,
     this.position = BubblePosition.solo,
     this.isSelected = false,
-    this.isHighlighted = false,
     this.searchQuery = '',
     this.onShowMenu,
     this.onTap,
@@ -41,17 +39,11 @@ class MessageBubble extends StatelessWidget {
     // Bubble colour
     final bubbleColor = isSelected
         ? colorScheme.primary.withAlpha(50)
-        : isHighlighted
-        ? colorScheme.tertiaryContainer
         : isOut
         ? colorScheme.primary
         : colorScheme.surfaceContainerHighest;
-    final textColor = isHighlighted
-        ? colorScheme.onTertiaryContainer
-        : isOut ? colorScheme.onPrimary : colorScheme.onSurface;
-    final timeColor = isHighlighted
-        ? colorScheme.onTertiaryContainer.withAlpha(179)
-        : isOut
+    final textColor = isOut ? colorScheme.onPrimary : colorScheme.onSurface;
+    final timeColor = isOut
         ? colorScheme.onPrimary.withAlpha(179)
         : colorScheme.onSurfaceVariant;
 

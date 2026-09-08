@@ -9,8 +9,8 @@ class QueryIntent {
   final int? startTime;
   final int? endTime;
   final List<String> senderHints; // address LIKE patterns
-  final String ftsQuery;          // sanitized FTS4 MATCH string
-  final String? notTerm;          // post-filter exclusion (FTS4 doesn't support NOT)
+  final String ftsQuery; // sanitized FTS4 MATCH string
+  final String? notTerm; // post-filter exclusion (FTS4 doesn't support NOT)
   final bool onlyUnread;
   final bool onlyStarred;
 
@@ -157,8 +157,14 @@ class SmartQueryParser {
           : Duration(days: n * 30);
       final d = now.subtract(offset);
       startTime = DateTime(d.year, d.month, d.day).millisecondsSinceEpoch;
-      endTime =
-          DateTime(d.year, d.month, d.day, 23, 59, 59).millisecondsSinceEpoch;
+      endTime = DateTime(
+        d.year,
+        d.month,
+        d.day,
+        23,
+        59,
+        59,
+      ).millisecondsSinceEpoch;
     }
 
     // Common relative keywords — ordered from most specific to least
@@ -166,32 +172,47 @@ class SmartQueryParser {
       'yesterday': () {
         final d = now.subtract(const Duration(days: 1));
         startTime = DateTime(d.year, d.month, d.day).millisecondsSinceEpoch;
-        endTime = DateTime(d.year, d.month, d.day, 23, 59, 59)
-            .millisecondsSinceEpoch;
+        endTime = DateTime(
+          d.year,
+          d.month,
+          d.day,
+          23,
+          59,
+          59,
+        ).millisecondsSinceEpoch;
         return null;
       },
       'today': () {
-        startTime = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+        startTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).millisecondsSinceEpoch;
         endTime = now.millisecondsSinceEpoch;
         return null;
       },
       'this week': () {
         // Monday of current week
         final monday = now.subtract(Duration(days: now.weekday - 1));
-        startTime =
-            DateTime(monday.year, monday.month, monday.day).millisecondsSinceEpoch;
+        startTime = DateTime(
+          monday.year,
+          monday.month,
+          monday.day,
+        ).millisecondsSinceEpoch;
         endTime = now.millisecondsSinceEpoch;
         return null;
       },
       'last week': () {
-        startTime =
-            now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+        startTime = now
+            .subtract(const Duration(days: 7))
+            .millisecondsSinceEpoch;
         endTime = now.millisecondsSinceEpoch;
         return null;
       },
       'past week': () {
-        startTime =
-            now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+        startTime = now
+            .subtract(const Duration(days: 7))
+            .millisecondsSinceEpoch;
         endTime = now.millisecondsSinceEpoch;
         return null;
       },
@@ -201,14 +222,16 @@ class SmartQueryParser {
         return null;
       },
       'last month': () {
-        startTime =
-            now.subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+        startTime = now
+            .subtract(const Duration(days: 30))
+            .millisecondsSinceEpoch;
         endTime = now.millisecondsSinceEpoch;
         return null;
       },
       'past month': () {
-        startTime =
-            now.subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+        startTime = now
+            .subtract(const Duration(days: 30))
+            .millisecondsSinceEpoch;
         endTime = now.millisecondsSinceEpoch;
         return null;
       },
@@ -219,8 +242,14 @@ class SmartQueryParser {
       },
       'last year': () {
         startTime = DateTime(now.year - 1, 1, 1).millisecondsSinceEpoch;
-        endTime =
-            DateTime(now.year - 1, 12, 31, 23, 59, 59).millisecondsSinceEpoch;
+        endTime = DateTime(
+          now.year - 1,
+          12,
+          31,
+          23,
+          59,
+          59,
+        ).millisecondsSinceEpoch;
         return null;
       },
       'weekend': () {
@@ -230,10 +259,19 @@ class SmartQueryParser {
             : (now.weekday == 7 ? 1 : now.weekday + 1);
         final sat = now.subtract(Duration(days: daysToSat));
         final sun = sat.add(const Duration(days: 1));
-        startTime = DateTime(sat.year, sat.month, sat.day).millisecondsSinceEpoch;
-        endTime =
-            DateTime(sun.year, sun.month, sun.day, 23, 59, 59)
-                .millisecondsSinceEpoch;
+        startTime = DateTime(
+          sat.year,
+          sat.month,
+          sat.day,
+        ).millisecondsSinceEpoch;
+        endTime = DateTime(
+          sun.year,
+          sun.month,
+          sun.day,
+          23,
+          59,
+          59,
+        ).millisecondsSinceEpoch;
         return null;
       },
     };
@@ -265,9 +303,14 @@ class SmartQueryParser {
           final daysBack = (now.weekday - entry.value + 7) % 7;
           final d = now.subtract(Duration(days: daysBack == 0 ? 7 : daysBack));
           startTime = DateTime(d.year, d.month, d.day).millisecondsSinceEpoch;
-          endTime =
-              DateTime(d.year, d.month, d.day, 23, 59, 59)
-                  .millisecondsSinceEpoch;
+          endTime = DateTime(
+            d.year,
+            d.month,
+            d.day,
+            23,
+            59,
+            59,
+          ).millisecondsSinceEpoch;
           break;
         }
       }
@@ -275,18 +318,30 @@ class SmartQueryParser {
 
     // Named months with optional year: "jan 2024", "march", "january 2023"
     const monthNames = {
-      'january': 1, 'jan': 1,
-      'february': 2, 'feb': 2,
-      'march': 3, 'mar': 3,
-      'april': 4, 'apr': 4,
+      'january': 1,
+      'jan': 1,
+      'february': 2,
+      'feb': 2,
+      'march': 3,
+      'mar': 3,
+      'april': 4,
+      'apr': 4,
       'may': 5,
-      'june': 6, 'jun': 6,
-      'july': 7, 'jul': 7,
-      'august': 8, 'aug': 8,
-      'september': 9, 'sep': 9, 'sept': 9,
-      'october': 10, 'oct': 10,
-      'november': 11, 'nov': 11,
-      'december': 12, 'dec': 12,
+      'june': 6,
+      'jun': 6,
+      'july': 7,
+      'jul': 7,
+      'august': 8,
+      'aug': 8,
+      'september': 9,
+      'sep': 9,
+      'sept': 9,
+      'october': 10,
+      'oct': 10,
+      'november': 11,
+      'nov': 11,
+      'december': 12,
+      'dec': 12,
     };
 
     if (startTime == null) {
@@ -303,10 +358,9 @@ class SmartQueryParser {
         final nextMonth = month == 12
             ? DateTime(year + 1, 1, 1)
             : DateTime(year, month + 1, 1);
-        endTime =
-            nextMonth
-                .subtract(const Duration(milliseconds: 1))
-                .millisecondsSinceEpoch;
+        endTime = nextMonth
+            .subtract(const Duration(milliseconds: 1))
+            .millisecondsSinceEpoch;
       } else {
         // Single month name — longest match first to avoid "mar" matching in "march"
         final sortedMonths = monthNames.keys.toList()
@@ -322,10 +376,9 @@ class SmartQueryParser {
             final nextMonth = month == 12
                 ? DateTime(year + 1, 1, 1)
                 : DateTime(year, month + 1, 1);
-            endTime =
-                nextMonth
-                    .subtract(const Duration(milliseconds: 1))
-                    .millisecondsSinceEpoch;
+            endTime = nextMonth
+                .subtract(const Duration(milliseconds: 1))
+                .millisecondsSinceEpoch;
             break;
           }
         }
@@ -391,7 +444,19 @@ class SmartQueryParser {
       final hasOr = RegExp(r'\bor\b').hasMatch(q);
 
       // Tokenise — keep only meaningful tokens (length > 1, not stop-words)
-      final stopWords = {'is', 'in', 'at', 'on', 'to', 'by', 'an', 'of', 'for', 'the', 'a'};
+      final stopWords = {
+        'is',
+        'in',
+        'at',
+        'on',
+        'to',
+        'by',
+        'an',
+        'of',
+        'for',
+        'the',
+        'a',
+      };
       final tokens = q
           .split(RegExp(r'\s+'))
           .where((t) => t.isNotEmpty && t.length > 1 && !stopWords.contains(t))
@@ -468,13 +533,19 @@ class SmartSearchService {
     if (onlyStarred) conditions.add('m.isStarred = 1');
 
     if (wantsOtp) {
-      conditions.add("(m.body LIKE '%otp%' OR m.body LIKE '%code%' OR m.body LIKE '%pin%')");
+      conditions.add(
+        "(m.body LIKE '%otp%' OR m.body LIKE '%code%' OR m.body LIKE '%pin%')",
+      );
     }
     if (wantsLink) {
-      conditions.add("(m.body LIKE '%http%' OR m.body LIKE '%.com/%' OR m.body LIKE '%.in/%' OR m.body LIKE '%bit.ly%')");
+      conditions.add(
+        "(m.body LIKE '%http%' OR m.body LIKE '%.com/%' OR m.body LIKE '%.in/%' OR m.body LIKE '%bit.ly%')",
+      );
     }
     if (wantsFinance) {
-      conditions.add("(m.body LIKE '%rs.%' OR m.body LIKE '%inr%' OR m.body LIKE '%debited%' OR m.body LIKE '%credited%' OR m.body LIKE '%a/c%')");
+      conditions.add(
+        "(m.body LIKE '%rs.%' OR m.body LIKE '%inr%' OR m.body LIKE '%debited%' OR m.body LIKE '%credited%' OR m.body LIKE '%a/c%')",
+      );
     }
 
     // Sender hints: address matches any of the hints OR body contains sender name
@@ -493,8 +564,10 @@ class SmartSearchService {
 
     if (intent.ftsQuery.isNotEmpty) {
       // FTS4 path — keyword + filters
-      final sanitizedFts =
-          intent.ftsQuery.replaceAll('"', '""'); // escape double quotes
+      final sanitizedFts = intent.ftsQuery.replaceAll(
+        '"',
+        '""',
+      ); // escape double quotes
       try {
         rows = await db.rawQuery(
           '''
@@ -512,7 +585,9 @@ class SmartSearchService {
         final fallbackConditions = List<String>.from(conditions);
         final fallbackArgs = List<dynamic>.from(args);
         final likePattern = '%${rawQuery.replaceAll("'", "''")}%';
-        fallbackConditions.add("(m.body LIKE ? OR m.address LIKE ? OR m.contactName LIKE ?)");
+        fallbackConditions.add(
+          "(m.body LIKE ? OR m.address LIKE ? OR m.contactName LIKE ?)",
+        );
         fallbackArgs.addAll([likePattern, likePattern, likePattern]);
         rows = await _plainQuery(fallbackConditions, fallbackArgs, db);
       }
@@ -524,7 +599,9 @@ class SmartSearchService {
       return [];
     }
 
-    var messages = rows.map((r) => SmsMessage.fromMap(Map<String, dynamic>.from(r))).toList();
+    var messages = rows
+        .map((r) => SmsMessage.fromMap(Map<String, dynamic>.from(r)))
+        .toList();
 
     // ── Post-filter: NOT term (FTS4 doesn't support NOT natively) ─────────
     if (intent.notTerm != null) {
@@ -542,15 +619,14 @@ class SmartSearchService {
     List<dynamic> args,
     dynamic db,
   ) async {
-    final whereClause = conditions.isNotEmpty ? 'WHERE ${conditions.join(' AND ')}' : '';
-    return await db.rawQuery(
-      '''
+    final whereClause = conditions.isNotEmpty
+        ? 'WHERE ${conditions.join(' AND ')}'
+        : '';
+    return await db.rawQuery('''
       SELECT m.* FROM messages m
       $whereClause
       ORDER BY m.date DESC
       LIMIT 150
-      ''',
-      args,
-    );
+      ''', args);
   }
 }

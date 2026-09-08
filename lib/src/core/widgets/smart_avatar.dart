@@ -38,7 +38,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
   @override
   void didUpdateWidget(SmartAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.thread?.id != oldWidget.thread?.id || 
+    if (widget.thread?.id != oldWidget.thread?.id ||
         widget.overrideAddress != oldWidget.overrideAddress) {
       _photoBytes = null;
       _loadPhoto();
@@ -196,10 +196,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
                 height: widget.radius * 2,
                 color: avatarColor,
                 alignment: Alignment.center,
-                child: Text(
-                  initial,
-                  style: fallbackTextStyle,
-                ),
+                child: Text(initial, style: fallbackTextStyle),
               ),
             ),
           ),

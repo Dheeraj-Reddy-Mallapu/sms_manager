@@ -214,7 +214,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         forceSync: false,
       );
 
-      final category = current is HomeLoaded ? current.activeCategory : 'Smart ✦';
+      final category = current is HomeLoaded
+          ? current.activeCategory
+          : 'Smart ✦';
       emit(
         HomeLoaded(
           threads: cached,

@@ -72,7 +72,9 @@ class SmsRepository {
         body: thread.snippet,
         contactName: thread.contactName,
       );
-      return thread.copyWith(category: category.isNotEmpty ? category : 'Updates');
+      return thread.copyWith(
+        category: category.isNotEmpty ? category : 'Updates',
+      );
     }).toList();
     if (threads.isNotEmpty) {
       await _db.upsertThreads(threads);
@@ -150,7 +152,9 @@ class SmsRepository {
             body: thread.snippet,
             contactName: thread.contactName,
           );
-          return thread.copyWith(category: category.isNotEmpty ? category : 'Updates');
+          return thread.copyWith(
+            category: category.isNotEmpty ? category : 'Updates',
+          );
         }).toList();
 
         if (threads.isNotEmpty) {
@@ -163,12 +167,20 @@ class SmsRepository {
         }
 
         // Recovery: re-fetch messages if messages table is sparse
-        final msgCount = Sqflite.firstIntValue(await _db.database.then(
-          (db) => db.rawQuery('SELECT COUNT(*) FROM messages'),
-        )) ?? 0;
-        final threadCount = Sqflite.firstIntValue(await _db.database.then(
-          (db) => db.rawQuery('SELECT COUNT(*) FROM threads'),
-        )) ?? 0;
+        final msgCount =
+            Sqflite.firstIntValue(
+              await _db.database.then(
+                (db) => db.rawQuery('SELECT COUNT(*) FROM messages'),
+              ),
+            ) ??
+            0;
+        final threadCount =
+            Sqflite.firstIntValue(
+              await _db.database.then(
+                (db) => db.rawQuery('SELECT COUNT(*) FROM threads'),
+              ),
+            ) ??
+            0;
 
         if (msgCount < threadCount) {
           Future.microtask(() async {
@@ -208,7 +220,11 @@ class SmsRepository {
     bool forceSync = false,
   }) async {
     if (!forceSync) {
-      final cached = await _db.getMessages(threadId, limit: limit, offset: offset);
+      final cached = await _db.getMessages(
+        threadId,
+        limit: limit,
+        offset: offset,
+      );
       if (cached.isNotEmpty) return cached;
     }
 
@@ -227,7 +243,10 @@ class SmsRepository {
   Future<void> upsertThreadFromIncomingSms(
     Map<String, dynamic> incomingEvent,
   ) async {
-    final allThreads = await NativeSmsService.fetchThreads(limit: 10, offset: 0);
+    final allThreads = await NativeSmsService.fetchThreads(
+      limit: 10,
+      offset: 0,
+    );
     final address = incomingEvent['address'] as String? ?? '';
     final matched = allThreads.where((t) {
       return (t['address'] as String? ?? '') == address;
@@ -239,7 +258,9 @@ class SmsRepository {
         body: thread.snippet,
         contactName: thread.contactName,
       );
-      thread = thread.copyWith(category: category.isNotEmpty ? category : 'Updates');
+      thread = thread.copyWith(
+        category: category.isNotEmpty ? category : 'Updates',
+      );
       await _db.upsertThread(thread);
     }
   }

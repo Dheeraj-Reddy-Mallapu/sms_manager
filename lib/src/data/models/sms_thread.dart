@@ -18,8 +18,11 @@ class SmsThread extends Equatable {
   final bool isBlocked;
 
   /// Returns the categories as a list, filtering out empty strings.
-  List<String> get categoryList => 
-      category.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+  List<String> get categoryList => category
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
 
   const SmsThread({
     required this.id,

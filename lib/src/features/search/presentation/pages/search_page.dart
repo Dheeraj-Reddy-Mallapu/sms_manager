@@ -23,7 +23,13 @@ class _SearchPageState extends State<SearchPage> {
 
   String _sortBy = 'Relevance'; // or 'Date'
 
-  final List<String> _filters = ['Unread', 'Starred', 'OTP', 'Has Link', 'Finance'];
+  final List<String> _filters = [
+    'Unread',
+    'Starred',
+    'OTP',
+    'Has Link',
+    'Finance',
+  ];
 
   @override
   void initState() {
@@ -351,7 +357,12 @@ class _SearchPageState extends State<SearchPage> {
     );
 
     if (highlights.isEmpty) {
-      return Text(body, style: base, maxLines: 3, overflow: TextOverflow.ellipsis);
+      return Text(
+        body,
+        style: base,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      );
     }
 
     final spans = <TextSpan>[];
@@ -498,5 +509,4 @@ class _SearchPageState extends State<SearchPage> {
       ],
     );
   }
-
 }

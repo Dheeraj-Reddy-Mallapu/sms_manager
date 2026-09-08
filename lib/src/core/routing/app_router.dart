@@ -38,12 +38,17 @@ final appRouter = GoRouter(
           path: 'conversation/:threadId',
           builder: (context, state) {
             final threadId = int.parse(state.pathParameters['threadId']!);
-            final highlightMessageIdStr = state.uri.queryParameters['messageId'];
-            final highlightMessageId = highlightMessageIdStr != null ? int.tryParse(highlightMessageIdStr) : null;
-            
+            final highlightMessageIdStr =
+                state.uri.queryParameters['messageId'];
+            final highlightMessageId = highlightMessageIdStr != null
+                ? int.tryParse(highlightMessageIdStr)
+                : null;
+
             final targetDateStr = state.uri.queryParameters['targetDate'];
-            final targetDate = targetDateStr != null ? int.tryParse(targetDateStr) : null;
-            
+            final targetDate = targetDateStr != null
+                ? int.tryParse(targetDateStr)
+                : null;
+
             SmsThread? thread;
             String? initialBody;
 

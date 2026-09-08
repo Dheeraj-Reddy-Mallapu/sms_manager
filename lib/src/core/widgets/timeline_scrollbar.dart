@@ -110,7 +110,9 @@ class _TimelineScrollbarState extends State<TimelineScrollbar>
     // Jump scroll: for reversed lists, fraction=1 (bottom of track) = pixels=0 (newest)
     final pos = widget.controller.position;
     if (pos.maxScrollExtent > 0) {
-      final scrollFraction = widget.reversed ? 1.0 - displayFraction : displayFraction;
+      final scrollFraction = widget.reversed
+          ? 1.0 - displayFraction
+          : displayFraction;
       widget.controller.jumpTo(scrollFraction * pos.maxScrollExtent);
     }
   }

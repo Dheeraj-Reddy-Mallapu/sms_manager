@@ -33,7 +33,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       final enriched = <SearchResultItem>[];
 
       for (final msg in messages) {
-        final thread = await db.getThreadById(msg.threadId) ??
+        final thread =
+            await db.getThreadById(msg.threadId) ??
             SmsThread(
               id: msg.threadId,
               address: msg.address,
@@ -68,8 +69,21 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
 
     // Extract meaningful tokens (skip stop-words and very short tokens)
     const stopWords = {
-      'is', 'in', 'at', 'on', 'to', 'by', 'an', 'of', 'for', 'the', 'a',
-      'from', 'not', 'or', 'and',
+      'is',
+      'in',
+      'at',
+      'on',
+      'to',
+      'by',
+      'an',
+      'of',
+      'for',
+      'the',
+      'a',
+      'from',
+      'not',
+      'or',
+      'and',
     };
     final tokens = rawQuery
         .toLowerCase()

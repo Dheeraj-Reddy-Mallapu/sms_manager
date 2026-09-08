@@ -18,9 +18,19 @@ class LoadMessages extends ConversationEvent {
   final String address;
   final int? highlightMessageId;
   final int? targetDate;
-  const LoadMessages(this.threadId, {this.address = '', this.highlightMessageId, this.targetDate});
+  const LoadMessages(
+    this.threadId, {
+    this.address = '',
+    this.highlightMessageId,
+    this.targetDate,
+  });
   @override
-  List<Object?> get props => [threadId, address, highlightMessageId, targetDate];
+  List<Object?> get props => [
+    threadId,
+    address,
+    highlightMessageId,
+    targetDate,
+  ];
 }
 
 class LoadMoreMessages extends ConversationEvent {
@@ -201,21 +211,21 @@ class ConversationLoaded extends ConversationState {
 
   @override
   List<Object?> get props => [
-        messages,
-        threadId,
-        address,
-        hasMore,
-        isLoadingMore,
-        isSending,
-        selectedIds,
-        isSearchActive,
-        searchQuery,
-        selectedSimId,
-        highlightMessageId,
-        scrollToMessageId,
-        alreadyReadIds,
-        simInfoList,
-      ];
+    messages,
+    threadId,
+    address,
+    hasMore,
+    isLoadingMore,
+    isSending,
+    selectedIds,
+    isSearchActive,
+    searchQuery,
+    selectedSimId,
+    highlightMessageId,
+    scrollToMessageId,
+    alreadyReadIds,
+    simInfoList,
+  ];
 }
 
 class ConversationError extends ConversationState {
@@ -274,26 +284,31 @@ class ConversationBloc extends Bloc<ConversationEvent, ConversationState> {
     }, onError: (_) {});
 
     try {
-      final limit = (event.highlightMessageId != null || event.targetDate != null) ? 5000 : _pageSize;
-      
+      final limit =
+          (event.highlightMessageId != null || event.targetDate != null)
+          ? 5000
+          : _pageSize;
+
       // Fetch newest 50 (or 5000) from cache (fast), then refresh from native
       final cached = await repository.getMessages(
         event.threadId,
         limit: limit,
         offset: 0,
       );
-      
+
       int? effectiveHighlightId = event.highlightMessageId;
       int? effectiveScrollId = event.highlightMessageId;
-      
+
       if (effectiveScrollId == null && event.targetDate != null) {
         // Try to find the message that matches this exact date to scroll to (no highlight)
         try {
-          final targetMsg = cached.firstWhere((m) => m.date == event.targetDate);
+          final targetMsg = cached.firstWhere(
+            (m) => m.date == event.targetDate,
+          );
           effectiveScrollId = targetMsg.id;
         } catch (_) {}
       }
-      
+
       final displayList = _toDisplayOrder(cached);
 
       // hasMore: if we got a full page, assume there are more

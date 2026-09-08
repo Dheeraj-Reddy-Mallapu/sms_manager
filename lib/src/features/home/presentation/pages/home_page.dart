@@ -265,7 +265,7 @@ class _HomePageState extends State<HomePage> {
 
   List<SmsThread> _filterThreads(List<SmsThread> threads, String category) {
     if (category == 'Smart ✦' || category == 'All') return threads;
-    
+
     switch (category) {
       case 'Unread':
         return threads.where((t) => !t.read).toList();
@@ -283,8 +283,17 @@ class _HomePageState extends State<HomePage> {
     ColorScheme colorScheme,
   ) {
     final categories = [
-      'Smart ✦', 'All', 'Unread', 'Finance', 'OTP', 
-      'Shopping', 'Travel', 'Govt & Alerts', 'Health', 'People', 'Starred'
+      'Smart ✦',
+      'All',
+      'Unread',
+      'Finance',
+      'OTP',
+      'Shopping',
+      'Travel',
+      'Govt & Alerts',
+      'Health',
+      'People',
+      'Starred',
     ];
 
     return SingleChildScrollView(
@@ -299,12 +308,15 @@ class _HomePageState extends State<HomePage> {
               label: Text(category),
               selected: isSelected,
               onSelected: (selected) {
-                if (selected) context.read<HomeBloc>().add(ChangeCategoryFilter(category));
+                if (selected)
+                  context.read<HomeBloc>().add(ChangeCategoryFilter(category));
               },
               backgroundColor: colorScheme.surfaceContainerHighest,
               selectedColor: colorScheme.primary,
               labelStyle: TextStyle(
-                color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                color: isSelected
+                    ? colorScheme.onPrimary
+                    : colorScheme.onSurfaceVariant,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
               shape: RoundedRectangleBorder(
@@ -320,11 +332,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   /// The Smart View is injected natively as Slivers into the CustomScrollView
-  Widget _buildSmartView(BuildContext context, HomeLoaded state, List<SmsThread> threads, ColorScheme colorScheme) {
+  Widget _buildSmartView(
+    BuildContext context,
+    HomeLoaded state,
+    List<SmsThread> threads,
+    ColorScheme colorScheme,
+  ) {
     final now = DateTime.now();
     final fifteenMinsAgo = now.subtract(const Duration(minutes: 15));
     final startOfToday = DateTime(now.year, now.month, now.day);
-    
+
     // HERO ZONE: Active OTPs (< 15 mins)
     final activeOtps = threads.where((t) {
       if (!t.categoryList.contains('OTP')) return false;
@@ -345,9 +362,11 @@ class _HomePageState extends State<HomePage> {
       if (!t.categoryList.contains('Finance')) return false;
       return DateTime.fromMillisecondsSinceEpoch(t.date).isAfter(startOfToday);
     }).toList();
-    
+
     final todaysShopping = threads.where((t) {
-      if (!t.categoryList.contains('Shopping') && !t.categoryList.contains('Travel')) return false;
+      if (!t.categoryList.contains('Shopping') &&
+          !t.categoryList.contains('Travel'))
+        return false;
       return DateTime.fromMillisecondsSinceEpoch(t.date).isAfter(startOfToday);
     }).toList();
 
@@ -359,52 +378,113 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
-          
           if (activeOtps.isNotEmpty) ...[
-            Text('Right Now', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+            Text(
+              'Right Now',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 8),
-            ...activeOtps.map((t) => _buildHeroCard(context, t, colorScheme, isOtp: true)),
+            ...activeOtps.map(
+              (t) => _buildHeroCard(context, t, colorScheme, isOtp: true),
+            ),
             const SizedBox(height: 16),
           ],
 
           if (urgentAlerts.isNotEmpty) ...[
             if (activeOtps.isEmpty)
-               Text('Right Now', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+              Text(
+                'Right Now',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             const SizedBox(height: 8),
-            ...urgentAlerts.map((t) => _buildHeroCard(context, t, colorScheme, isAlert: true)),
+            ...urgentAlerts.map(
+              (t) => _buildHeroCard(context, t, colorScheme, isAlert: true),
+            ),
             const SizedBox(height: 16),
           ],
-          
-          if (todaysFinance.isNotEmpty || todaysShopping.isNotEmpty || unreadPeople.isNotEmpty) ...[
-            Text("Today's Digest", style: Theme.of(context).textTheme.titleSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+
+          if (todaysFinance.isNotEmpty ||
+              todaysShopping.isNotEmpty ||
+              unreadPeople.isNotEmpty) ...[
+            Text(
+              "Today's Digest",
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 8),
-            
+
             if (unreadPeople.isNotEmpty)
-              _buildDigestCard(context, state, 'Unread Personal', '${unreadPeople.length} unread messages from contacts', Icons.person, unreadPeople, colorScheme),
-              
+              _buildDigestCard(
+                context,
+                state,
+                'Unread Personal',
+                '${unreadPeople.length} unread messages from contacts',
+                Icons.person,
+                unreadPeople,
+                colorScheme,
+              ),
+
             if (todaysFinance.isNotEmpty)
-              _buildDigestCard(context, state, 'Financial Updates', '${todaysFinance.length} transactions today', Icons.account_balance_wallet, todaysFinance, colorScheme),
-              
+              _buildDigestCard(
+                context,
+                state,
+                'Financial Updates',
+                '${todaysFinance.length} transactions today',
+                Icons.account_balance_wallet,
+                todaysFinance,
+                colorScheme,
+              ),
+
             if (todaysShopping.isNotEmpty)
-              _buildDigestCard(context, state, 'Orders & Travel', '${todaysShopping.length} updates today', Icons.local_shipping, todaysShopping, colorScheme),
-              
+              _buildDigestCard(
+                context,
+                state,
+                'Orders & Travel',
+                '${todaysShopping.length} updates today',
+                Icons.local_shipping,
+                todaysShopping,
+                colorScheme,
+              ),
+
             const SizedBox(height: 24),
           ],
-          
+
           Center(
-             child: Text("— You're all caught up —", style: TextStyle(color: colorScheme.onSurfaceVariant.withAlpha(128))),
+            child: Text(
+              "— You're all caught up —",
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant.withAlpha(128),
+              ),
+            ),
           ),
           const SizedBox(height: 80),
-
         ]),
       ),
     );
   }
 
-  Widget _buildHeroCard(BuildContext context, SmsThread thread, ColorScheme colorScheme, {bool isOtp = false, bool isAlert = false}) {
-    final bgColor = isAlert ? colorScheme.errorContainer : colorScheme.primaryContainer;
-    final fgColor = isAlert ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer;
-    
+  Widget _buildHeroCard(
+    BuildContext context,
+    SmsThread thread,
+    ColorScheme colorScheme, {
+    bool isOtp = false,
+    bool isAlert = false,
+  }) {
+    final bgColor = isAlert
+        ? colorScheme.errorContainer
+        : colorScheme.primaryContainer;
+    final fgColor = isAlert
+        ? colorScheme.onErrorContainer
+        : colorScheme.onPrimaryContainer;
+
     IconData icon = Icons.notifications;
     if (isOtp) icon = Icons.password;
     if (isAlert) icon = Icons.warning;
@@ -416,7 +496,10 @@ class _HomePageState extends State<HomePage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => context.push('/home/conversation/${thread.id}?targetDate=${thread.date}', extra: thread),
+        onTap: () => context.push(
+          '/home/conversation/${thread.id}?targetDate=${thread.date}',
+          extra: thread,
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -429,10 +512,19 @@ class _HomePageState extends State<HomePage> {
                   Expanded(
                     child: Text(
                       thread.contactName ?? thread.address,
-                      style: TextStyle(fontWeight: FontWeight.bold, color: fgColor),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: fgColor,
+                      ),
                     ),
                   ),
-                  Text(DateFormatter.formatShortDate(thread.date), style: TextStyle(fontSize: 12, color: fgColor.withAlpha(200))),
+                  Text(
+                    DateFormatter.formatShortDate(thread.date),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: fgColor.withAlpha(200),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -461,7 +553,9 @@ class _HomePageState extends State<HomePage> {
                             icon: const Icon(Icons.copy, size: 16),
                             label: const Text('Copy'),
                             onPressed: () {
-                              Clipboard.setData(ClipboardData(text: extracted.otp!));
+                              Clipboard.setData(
+                                ClipboardData(text: extracted.otp!),
+                              );
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('OTP Copied!')),
                               );
@@ -476,7 +570,7 @@ class _HomePageState extends State<HomePage> {
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
                     );
-                  }
+                  },
                 ),
               ] else ...[
                 Text(
@@ -493,7 +587,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildDigestCard(BuildContext context, HomeLoaded state, String title, String subtitle, IconData icon, List<SmsThread> threads, ColorScheme colorScheme) {
+  Widget _buildDigestCard(
+    BuildContext context,
+    HomeLoaded state,
+    String title,
+    String subtitle,
+    IconData icon,
+    List<SmsThread> threads,
+    ColorScheme colorScheme,
+  ) {
     return Card(
       elevation: 0,
       color: colorScheme.surfaceContainerLowest,
@@ -509,12 +611,35 @@ class _HomePageState extends State<HomePage> {
           tilePadding: const EdgeInsets.all(8.0),
           leading: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: colorScheme.secondaryContainer, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: colorScheme.secondaryContainer,
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, color: colorScheme.onSecondaryContainer),
           ),
-          title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSurface, fontSize: 16)),
-          subtitle: Text(subtitle, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
-          children: threads.map((thread) => _buildThreadTile(context, state, thread, colorScheme, isDigest: true)).toList(),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14),
+          ),
+          children: threads
+              .map(
+                (thread) => _buildThreadTile(
+                  context,
+                  state,
+                  thread,
+                  colorScheme,
+                  isDigest: true,
+                ),
+              )
+              .toList(),
         ),
       ),
     );
@@ -546,7 +671,10 @@ class _HomePageState extends State<HomePage> {
         if (state.isSelectionMode) {
           context.read<HomeBloc>().add(ToggleThreadSelection(thread.id));
         } else {
-          context.go('/home/conversation/${thread.id}?targetDate=${thread.date}', extra: thread);
+          context.go(
+            '/home/conversation/${thread.id}?targetDate=${thread.date}',
+            extra: thread,
+          );
         }
       },
       borderRadius: BorderRadius.circular(12),
@@ -638,8 +766,11 @@ class _HomePageState extends State<HomePage> {
                         child: Builder(
                           builder: (context) {
                             final ext = SmsExtractor.extract(thread.snippet);
-                            
-                            if (ext.amount != null || ext.pnr != null || ext.url != null || ext.otp != null) {
+
+                            if (ext.amount != null ||
+                                ext.pnr != null ||
+                                ext.url != null ||
+                                ext.otp != null) {
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -649,7 +780,9 @@ class _HomePageState extends State<HomePage> {
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
-                                        color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                                        color: isUnread
+                                            ? colorScheme.onSurface
+                                            : colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   if (ext.otp != null)
@@ -659,16 +792,25 @@ class _HomePageState extends State<HomePage> {
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                         letterSpacing: 1.5,
-                                        color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                                        color: isUnread
+                                            ? colorScheme.onSurface
+                                            : colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    thread.snippet.isNotEmpty ? thread.snippet : '(No message content)',
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
-                                      fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal,
-                                    ),
+                                    thread.snippet.isNotEmpty
+                                        ? thread.snippet
+                                        : '(No message content)',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: isUnread
+                                              ? colorScheme.onSurface
+                                              : colorScheme.onSurfaceVariant,
+                                          fontWeight: isUnread
+                                              ? FontWeight.w500
+                                              : FontWeight.normal,
+                                        ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -679,20 +821,38 @@ class _HomePageState extends State<HomePage> {
                                       children: [
                                         if (ext.url != null)
                                           ActionChip(
-                                            label: const Text('🔗 Open Link', style: TextStyle(fontSize: 11)),
-                                            onPressed: () {}, 
+                                            label: const Text(
+                                              '🔗 Open Link',
+                                              style: TextStyle(fontSize: 11),
+                                            ),
+                                            onPressed: () {},
                                             padding: EdgeInsets.zero,
-                                            visualDensity: VisualDensity.compact,
+                                            visualDensity:
+                                                VisualDensity.compact,
                                           ),
                                         if (ext.pnr != null)
                                           ActionChip(
-                                            label: Text('✈️ Copy PNR: ${ext.pnr}', style: const TextStyle(fontSize: 11)),
+                                            label: Text(
+                                              '✈️ Copy PNR: ${ext.pnr}',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                              ),
+                                            ),
                                             onPressed: () {
-                                              Clipboard.setData(ClipboardData(text: ext.pnr!));
-                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PNR Copied!')));
+                                              Clipboard.setData(
+                                                ClipboardData(text: ext.pnr!),
+                                              );
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('PNR Copied!'),
+                                                ),
+                                              );
                                             },
                                             padding: EdgeInsets.zero,
-                                            visualDensity: VisualDensity.compact,
+                                            visualDensity:
+                                                VisualDensity.compact,
                                           ),
                                       ],
                                     ),
@@ -702,15 +862,22 @@ class _HomePageState extends State<HomePage> {
                             }
 
                             return Text(
-                              thread.snippet.isNotEmpty ? thread.snippet : '(No message content)',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: isUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
-                                fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal,
-                              ),
+                              thread.snippet.isNotEmpty
+                                  ? thread.snippet
+                                  : '(No message content)',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: isUnread
+                                        ? colorScheme.onSurface
+                                        : colorScheme.onSurfaceVariant,
+                                    fontWeight: isUnread
+                                        ? FontWeight.w500
+                                        : FontWeight.normal,
+                                  ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             );
-                          }
+                          },
                         ),
                       ),
                       if (isUnread) ...[
@@ -746,7 +913,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
 
   void _showMoreSheet(BuildContext context, ColorScheme colorScheme) {
     showModalBottomSheet(
@@ -795,11 +961,13 @@ class _HomePageState extends State<HomePage> {
                   Navigator.pop(context);
                   final info = await PackageInfo.fromPlatform();
                   if (!context.mounted) return;
-                  
+
                   showDialog(
                     context: context,
                     builder: (context) => Dialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(24.0),
                         child: Column(
@@ -811,25 +979,37 @@ class _HomePageState extends State<HomePage> {
                                 'assets/launcher_icon.webp',
                                 width: 72,
                                 height: 72,
-                                errorBuilder: (_, __, ___) => Icon(Icons.message_rounded, size: 72, color: Theme.of(context).colorScheme.primary),
+                                errorBuilder: (_, _, _) => Icon(
+                                  Icons.message_rounded,
+                                  size: 72,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 16),
                             Text(
                               'SMS Manager',
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 4),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.secondaryContainer,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .secondaryContainer,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 'v${info.version}',
                                 style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondaryContainer,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -838,16 +1018,23 @@ class _HomePageState extends State<HomePage> {
                             const SizedBox(height: 24),
                             Text(
                               'Made with ♥ by Dheeru',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                             ),
                             const SizedBox(height: 32),
                             SizedBox(
                               width: double.infinity,
                               child: FilledButton.icon(
                                 onPressed: () {
-                                  launchUrl(Uri.parse('https://play.google.com/store/apps/developer?id=Dheeru'));
+                                  launchUrl(
+                                    Uri.parse(
+                                      'https://play.google.com/store/apps/developer?id=Dheeru',
+                                    ),
+                                  );
                                 },
                                 icon: const Icon(Icons.apps),
                                 label: const Text('More Apps'),
@@ -865,7 +1052,11 @@ class _HomePageState extends State<HomePage> {
                                       applicationVersion: info.version,
                                       applicationIcon: Padding(
                                         padding: const EdgeInsets.all(8.0),
-                                        child: Image.asset('assets/launcher_icon.webp', width: 48, height: 48),
+                                        child: Image.asset(
+                                          'assets/launcher_icon.webp',
+                                          width: 48,
+                                          height: 48,
+                                        ),
                                       ),
                                     );
                                   },

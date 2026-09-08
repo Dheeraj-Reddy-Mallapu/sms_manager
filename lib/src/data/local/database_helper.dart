@@ -38,7 +38,9 @@ CREATE VIRTUAL TABLE messages_fts USING fts4(
 )
 ''');
       // Populate existing messages into FTS
-      await db.execute('INSERT INTO messages_fts(docid, body, address) SELECT id, body, address FROM messages;');
+      await db.execute(
+        'INSERT INTO messages_fts(docid, body, address) SELECT id, body, address FROM messages;',
+      );
 
       // Auto-sync FTS index with messages table
       await db.execute('''
@@ -149,7 +151,10 @@ END;
     await batch.commit(noResult: true);
   }
 
-  Future<List<SmsThread>> getThreads({int limit = 10000, int offset = 0}) async {
+  Future<List<SmsThread>> getThreads({
+    int limit = 10000,
+    int offset = 0,
+  }) async {
     final db = await database;
     final sql = '''
       SELECT t.*,
@@ -194,7 +199,10 @@ END;
 
   Future<void> markAllAsRead() async {
     final db = await database;
-    await db.update('threads', {'read': 1, 'unreadCount': 0}, where: 'read = 0');
+    await db.update('threads', {
+      'read': 1,
+      'unreadCount': 0,
+    }, where: 'read = 0');
     await db.update('messages', {'read': 1}, where: 'read = 0');
   }
 

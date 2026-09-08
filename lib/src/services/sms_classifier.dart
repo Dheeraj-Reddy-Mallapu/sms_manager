@@ -3,7 +3,11 @@ import 'package:sms_manager/src/services/sms_extractor.dart';
 class SmsClassifier {
   /// Analyzes a message and returns a comma-separated list of categories.
   /// Example: 'Finance,Shopping' or 'People'
-  static String classify({required String address, required String body, String? contactName}) {
+  static String classify({
+    required String address,
+    required String body,
+    String? contactName,
+  }) {
     final Set<String> categories = {};
     address = address.toUpperCase();
 
@@ -51,10 +55,11 @@ class SmsClassifier {
     if (SmsPatterns.healthKeywords.hasMatch(body)) {
       categories.add('Health');
     }
-    
+
     // Offers signals
     if (SmsPatterns.offerKeywords.hasMatch(body)) {
-      if (!categories.contains('OTP') && !categories.contains('Govt & Alerts')) {
+      if (!categories.contains('OTP') &&
+          !categories.contains('Govt & Alerts')) {
         categories.add('Offers');
       }
     }

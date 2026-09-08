@@ -16,18 +16,40 @@ class HighlightPulser extends StatefulWidget {
   State<HighlightPulser> createState() => _HighlightPulserState();
 }
 
-class _HighlightPulserState extends State<HighlightPulser> with SingleTickerProviderStateMixin {
+class _HighlightPulserState extends State<HighlightPulser>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Color?> _colorAnim;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
     _colorAnim = TweenSequence<Color?>([
-      TweenSequenceItem(tween: ColorTween(begin: Colors.transparent, end: widget.highlightColor), weight: 1),
-      TweenSequenceItem(tween: ColorTween(begin: widget.highlightColor, end: widget.highlightColor), weight: 4),
-      TweenSequenceItem(tween: ColorTween(begin: widget.highlightColor, end: Colors.transparent), weight: 3),
+      TweenSequenceItem(
+        tween: ColorTween(
+          begin: Colors.transparent,
+          end: widget.highlightColor,
+        ),
+        weight: 1,
+      ),
+      TweenSequenceItem(
+        tween: ColorTween(
+          begin: widget.highlightColor,
+          end: widget.highlightColor,
+        ),
+        weight: 4,
+      ),
+      TweenSequenceItem(
+        tween: ColorTween(
+          begin: widget.highlightColor,
+          end: Colors.transparent,
+        ),
+        weight: 3,
+      ),
     ]).animate(_controller);
 
     if (widget.isHighlighted) _controller.forward();
@@ -52,10 +74,7 @@ class _HighlightPulserState extends State<HighlightPulser> with SingleTickerProv
     return AnimatedBuilder(
       animation: _colorAnim,
       builder: (context, child) {
-        return Container(
-          color: _colorAnim.value,
-          child: child,
-        );
+        return Container(color: _colorAnim.value, child: child);
       },
       child: widget.child,
     );

@@ -60,8 +60,8 @@ class _ConversationPageState extends State<ConversationPage> {
     final address = widget.address ?? '';
     context.read<ConversationBloc>().add(
       LoadMessages(
-        widget.threadId, 
-        address: address, 
+        widget.threadId,
+        address: address,
         highlightMessageId: widget.highlightMessageId,
         targetDate: widget.targetDate,
       ),
@@ -69,8 +69,7 @@ class _ConversationPageState extends State<ConversationPage> {
     // Ensure we always start at the bottom (newest messages) after first frame.
     // reverse:true should do this automatically, but an explicit jump handles edge cases.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients &&
-          widget.highlightMessageId == null) {
+      if (_scrollController.hasClients && widget.highlightMessageId == null) {
         _scrollController.jumpTo(0.0);
       }
     });
@@ -105,7 +104,9 @@ class _ConversationPageState extends State<ConversationPage> {
     if (pos.hasContentDimensions && pos.pixels >= pos.maxScrollExtent - 150) {
       final bloc = context.read<ConversationBloc>();
       final bstate = bloc.state;
-      if (bstate is ConversationLoaded && bstate.hasMore && !bstate.isLoadingMore) {
+      if (bstate is ConversationLoaded &&
+          bstate.hasMore &&
+          !bstate.isLoadingMore) {
         bloc.add(LoadMoreMessages(widget.threadId));
       }
     }
@@ -158,8 +159,11 @@ class _ConversationPageState extends State<ConversationPage> {
               final total = bstate.messages.length;
               // In DESC list, idx=0 is newest (pixels=0), idx=total-1 is oldest (maxExtent).
               final fraction = idx / (total > 1 ? total - 1 : 1);
-              final target = fraction * _scrollController.position.maxScrollExtent;
-              _scrollController.jumpTo(target.clamp(0.0, _scrollController.position.maxScrollExtent));
+              final target =
+                  fraction * _scrollController.position.maxScrollExtent;
+              _scrollController.jumpTo(
+                target.clamp(0.0, _scrollController.position.maxScrollExtent),
+              );
             }
           }
         }
@@ -174,16 +178,23 @@ class _ConversationPageState extends State<ConversationPage> {
         return;
       }
 
-      final scrollRenderBox = _scrollController
-          .position.context.storageContext
-          .findRenderObject() as RenderBox?;
+      final scrollRenderBox =
+          _scrollController.position.context.storageContext.findRenderObject()
+              as RenderBox?;
       if (scrollRenderBox == null) return;
 
-      final itemOffset = renderBox.localToGlobal(Offset.zero, ancestor: scrollRenderBox);
+      final itemOffset = renderBox.localToGlobal(
+        Offset.zero,
+        ancestor: scrollRenderBox,
+      );
       final viewportHeight = _scrollController.position.viewportDimension;
       final currentPixels = _scrollController.position.pixels;
-      final targetPixels = (currentPixels + itemOffset.dy - (viewportHeight / 2) + (renderBox.size.height / 2))
-          .clamp(0.0, _scrollController.position.maxScrollExtent);
+      final targetPixels =
+          (currentPixels +
+                  itemOffset.dy -
+                  (viewportHeight / 2) +
+                  (renderBox.size.height / 2))
+              .clamp(0.0, _scrollController.position.maxScrollExtent);
 
       _scrollController.animateTo(
         targetPixels,
@@ -595,13 +606,17 @@ class _ConversationPageState extends State<ConversationPage> {
           final message = messages[msgIndex];
 
           // In DESC list: index+1 = older message, index-1 = newer message
-          final olderMsg = msgIndex < messages.length - 1 ? messages[msgIndex + 1] : null;
+          final olderMsg = msgIndex < messages.length - 1
+              ? messages[msgIndex + 1]
+              : null;
           final newerMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
 
-          final sameAsOlder = olderMsg != null &&
+          final sameAsOlder =
+              olderMsg != null &&
               olderMsg.isOutgoing == message.isOutgoing &&
               message.date - olderMsg.date < 60000;
-          final sameAsNewer = newerMsg != null &&
+          final sameAsNewer =
+              newerMsg != null &&
               newerMsg.isOutgoing == message.isOutgoing &&
               newerMsg.date - message.date < 60000;
 
@@ -627,7 +642,7 @@ class _ConversationPageState extends State<ConversationPage> {
           // Show unread separator above the oldest unread block
           final showUnreadSep =
               firstUnreadIdx != null && msgIndex == firstUnreadIdx;
-              
+
           final isHighlighted = state.highlightMessageId == message.id;
 
           return Column(
@@ -641,7 +656,8 @@ class _ConversationPageState extends State<ConversationPage> {
               if (showUnreadSep) const UnreadSeparator(),
               HighlightPulser(
                 isHighlighted: isHighlighted,
-                highlightColor: Theme.of(context).colorScheme.primaryContainer.withAlpha(100),
+                highlightColor: Theme.of(context).colorScheme.primaryContainer
+                    .withAlpha(100),
                 child: MessageBubble(
                   message: message,
                   position: pos,

@@ -798,45 +798,88 @@ class _HomePageState extends State<HomePage> {
                   
                   showDialog(
                     context: context,
-                    builder: (context) => AlertDialog(
-                      icon: Image.asset(
-                        'assets/launcher_icon.webp',
-                        width: 48,
-                        height: 48,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.message_rounded, size: 48),
+                    builder: (context) => Dialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.asset(
+                                'assets/launcher_icon.webp',
+                                width: 72,
+                                height: 72,
+                                errorBuilder: (_, __, ___) => Icon(Icons.message_rounded, size: 72, color: Theme.of(context).colorScheme.primary),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'SMS Manager',
+                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.secondaryContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'v${info.version}',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'Made with ♥ by Dheeru',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 32),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: () {
+                                  launchUrl(Uri.parse('https://play.google.com/store/apps/developer?id=Dheeru'));
+                                },
+                                icon: const Icon(Icons.apps),
+                                label: const Text('More Apps'),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                TextButton(
+                                  onPressed: () {
+                                    showLicensePage(
+                                      context: context,
+                                      applicationName: 'SMS Manager',
+                                      applicationVersion: info.version,
+                                      applicationIcon: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Image.asset('assets/launcher_icon.webp', width: 48, height: 48),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text('Licenses'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Close'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      title: const Text('SMS Manager'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('Version ${info.version}', style: Theme.of(context).textTheme.bodyMedium),
-                          const SizedBox(height: 8),
-                          Text('Made by Dheeru', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            showLicensePage(
-                              context: context,
-                              applicationName: 'SMS Manager',
-                              applicationVersion: info.version,
-                              applicationIcon: Image.asset('assets/launcher_icon.webp', width: 48, height: 48),
-                            );
-                          },
-                          child: const Text('View Licenses'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            launchUrl(Uri.parse('https://play.google.com/store/apps/developer?id=Dheeru'));
-                          },
-                          child: const Text('More Apps'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
                     ),
                   );
                 },
